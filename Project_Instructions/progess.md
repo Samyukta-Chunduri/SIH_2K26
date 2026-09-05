@@ -130,7 +130,7 @@ Implemented
 | ID  | Milestone                      | Status      |
 | --- | ------------------------------ | ----------- |
 | M0  | Environment setup              | COMPLETE    |
-| M1  | Qubit fundamentals             | NOT STARTED |
+| M1  | Qubit fundamentals             | COMPLETE    |
 | M2  | Pauli operators                | NOT STARTED |
 | M3  | Projective measurement         | NOT STARTED |
 | M4  | Bell states                    | NOT STARTED |
@@ -208,23 +208,23 @@ Understand and implement the basic qubit representation required by the project.
 
 ### Tasks
 
-* [ ] Represent \(|0\rangle\)
-* [ ] Represent \(|1\rangle\)
-* [ ] Understand superposition
-* [ ] Implement/verify normalized state vectors
-* [ ] Verify measurement probabilities
-* [ ] Verify probability normalization
+* [x] Represent \(|0\rangle\)
+* [x] Represent \(|1\rangle\)
+* [x] Understand superposition
+* [x] Implement/verify normalized state vectors
+* [x] Verify measurement probabilities
+* [x] Verify probability normalization
 
 ### Tests
 
-* [ ] State normalization
-* [ ] Born-rule probabilities
-* [ ] Probability sum equals 1 within numerical tolerance
+* [x] State normalization
+* [x] Born-rule probabilities
+* [x] Probability sum equals 1 within numerical tolerance
 
 ### Status
 
 ```text
-NOT STARTED
+COMPLETE
 ```
 
 ---
