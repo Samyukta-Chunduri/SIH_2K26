@@ -1316,7 +1316,74 @@ Do not silently choose whichever version is easier to implement.
 
 ---
 
-# 53. Final Decision Principle
+---
+
+# 54. DEC-054 — Single-Qubit Noise Channels, Density Matrix Representation, and Depolarizing Parameter Convention
+
+**Status:** ACCEPTED (Milestone M8)
+
+### Decision
+
+1. **State Representation Under Noise:**
+   A noisy quantum channel transforms pure states into mixed states. Therefore, channel noise outputs are represented as Hermitian, unit-trace, positive semidefinite $2\times 2$ density matrices $\rho$:
+   $$\rho = \rho^\dagger, \quad \operatorname{Tr}(\rho) = 1, \quad \rho \succeq 0$$
+   Pure state to density matrix mapping requires complex conjugation: $\rho = |\psi\rangle\langle\psi| = \text{np.outer}(\psi, \psi^*)$.
+
+2. **Kraus Representation:**
+   Single-qubit CPTP channels are represented via Kraus operators satisfying completeness:
+   $$\rho' = \sum_i K_i \rho K_i^\dagger, \quad \sum_i K_i^\dagger K_i = I$$
+
+3. **Noise Channel Models:**
+   - **Bit-flip:** $\rho' = (1-p)\rho + p X \rho X$, $K_0 = \sqrt{1-p}I, K_1 = \sqrt{p}X$
+   - **Phase-flip:** $\rho' = (1-p)\rho + p Z \rho Z$, $K_0 = \sqrt{1-p}I, K_1 = \sqrt{p}Z$
+   - **Depolarizing Channel Convention:** Q-SHIELD adopts the standard Pauli error convention:
+     $$\rho' = (1-p)\rho + \frac{p}{3}(X\rho X + Y\rho Y + Z\rho Z)$$
+     with Kraus operators $K_0 = \sqrt{1-p}I, K_{1,2,3} = \sqrt{p/3}\{X, Y, Z\}$.
+   - **Qiskit Aer Depolarizing Mapping:** Qiskit Aer's `depolarizing_error(p_{\text{aer}}, 1)` implements $\rho' = (1-p_{\text{aer}})\rho + p_{\text{aer}}(I/2)$. Since $I/2 = \frac{1}{4}(\rho + X\rho X + Y\rho Y + Z\rho Z)$, the exact parameter equivalence mapping is $p_{\text{aer}} = \frac{4}{3}p$.
+
+4. **Zero-Noise Identity Limit:**
+   At $p = 0$, every channel reduces identically to the identity channel: $\mathcal{E}(p=0)(\rho) = \rho$.
+
+5. **Physical Distinction:**
+   Noise channels represent honest physical imperfections. NOISE $\neq$ ATTACK. M8 outputs physical metrics (fidelity, Born measurement distributions) without making security decisions or classifying attacks.
+
+---
+
+# 55. DEC-055 — Honest Baseline Calibration, Sample Variance Convention, and Metric Aggregation
+
+**Status:** ACCEPTED (Milestone M9)
+
+### Decision
+
+1. **Purpose of Honest Baseline:**
+   An honest baseline characterizes the statistical distribution of quantum verification metrics under explicitly defined legitimate operating conditions. It is NOT an attack detector, contains no security decision thresholds, and does not label executions as attacks.
+   $$\text{Honest Configuration} \implies \text{Repeated Honest Trials} \implies \text{Metric Statistics} \implies \text{Honest Baseline}$$
+
+2. **Unbiased Sample Variance (Bessel's Correction):**
+   In accordance with statistical estimation for sampled observational data, the sample variance uses denominator $N - 1$:
+   $$s^2 = \frac{1}{N - 1} \sum_{i=1}^N (x_i - \mu)^2 \quad (N \ge 2)$$
+   For $N = 1$, sample variance is defined as $0.0$, and $N = 0$ is rejected with `ValueError`.
+
+3. **Metric Coverage:**
+   Baselines record distributions for:
+   - State overlap fidelity $F \in [0.0, 1.0]$
+   - Quantum bit error rate $\text{QBER} \in [0.0, 1.0]$
+   - Born measurement probabilities across $Z, X, Y$ bases
+   - Pauli expectation values $\langle X \rangle, \langle Y \rangle, \langle Z \rangle \in [-1.0, 1.0]$
+   - Bell correlation expectations $E_{XX}, E_{YY}, E_{ZZ} \in [-1.0, 1.0]$
+
+4. **Strict Configuration Conditioning & Canonical Fingerprinting:**
+   Baselines are strictly conditioned on their configuration (noise model, noise strength $p$, shot count, evaluated states, backend, calibration run count). Different configurations produce distinct, isolated baselines. `BaselineConfiguration.canonical_hash` computes a deterministic SHA-256 digest over all operating parameters to guarantee that incompatible configurations cannot share identity. They are never merged into a single multi-condition baseline.
+
+5. **Contamination Prevention & Provenance Validation:**
+   The calibration pipeline accepts only legitimate honest quantum executions. `CalibrationObservation` includes an explicit `is_honest: bool = True` invariant and defensive copying to protect against external mutation. `build_honest_baseline_from_observations` strictly rejects any observation marked with `is_honest=False`.
+
+6. **Small Sample Confidence Interval Convention:**
+   For $N \ge 2$, confidence intervals are calculated using Student's $t$ critical values ($df = N - 1$) and clamped to physical metric domains ($[0, 1]$ or $[-1, 1]$). For $N = 1$, degrees of freedom is $0$, and `confidence_interval` is explicitly set to `None` to prevent unscientific pseudo-intervals.
+
+---
+
+# 56. Final Decision Principle
 
 Q-SHIELD follows:
 
@@ -1347,3 +1414,5 @@ The purpose of this file is simple:
 Every major assumption must be visible, reviewable, testable, and changeable.
 
 **Status:** ACTIVE
+
+
