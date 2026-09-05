@@ -129,7 +129,7 @@ Implemented
 
 | ID  | Milestone                      | Status      |
 | --- | ------------------------------ | ----------- |
-| M0  | Environment setup              | NOT STARTED |
+| M0  | Environment setup              | COMPLETE    |
 | M1  | Qubit fundamentals             | NOT STARTED |
 | M2  | Pauli operators                | NOT STARTED |
 | M3  | Projective measurement         | NOT STARTED |
@@ -161,34 +161,42 @@ Prepare the development environment.
 
 ### Tasks
 
-* [ ] Verify Python installation
-* [ ] Create virtual environment
-* [ ] Install Qiskit
-* [ ] Install Qiskit Aer
-* [ ] Install NumPy
+* [x] Verify Python installation
+* [x] Create virtual environment
+* [x] Install Qiskit
+* [x] Install Qiskit Aer
+* [x] Install NumPy
 * [ ] Install SciPy
 * [ ] Install Pandas
 * [ ] Install Matplotlib
 * [ ] Install Streamlit
-* [ ] Create `requirements.txt`
-* [ ] Verify imports
-* [ ] Run a minimal Qiskit circuit
-* [ ] Run a minimal Aer simulation
-* [ ] Record package versions
+* [x] Create `requirements.txt`
+* [x] Verify imports
+* [x] Run a minimal Qiskit circuit
+* [x] Run a minimal Aer simulation
+* [x] Record package versions
 
 ### Tests
 
-* [ ] Python environment works
-* [ ] Qiskit imports
-* [ ] Aer imports
-* [ ] Simulator executes
-* [ ] Basic measurement works
+* [x] Python environment works
+* [x] Qiskit imports
+* [x] Aer imports
+* [x] Simulator executes
+* [x] Basic measurement works
 
 ### Status
 
 ```text
-NOT STARTED
+COMPLETE
 ```
+
+### Environment Details
+
+* **Python Version:** 3.13.7
+* **Qiskit Version:** 2.5.2
+* **Qiskit Aer Version:** 0.17.2
+* **NumPy Version:** 2.5.2
+* **Decisions/Problems:** No problems encountered. Installed only the minimal packages (`qiskit`, `qiskit-aer`, `numpy`) as requested for M0, deferring the rest (SciPy, Pandas, Matplotlib, Streamlit) until later milestones. Tests passed successfully.
 
 ---
 
