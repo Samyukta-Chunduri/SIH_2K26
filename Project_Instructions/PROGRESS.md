@@ -70,11 +70,10 @@ Demo ready
 
 ```text
 Current Phase:
-M10 — Statistical Comparison Engine (COMPLETE & VALIDATED)
-M11 — Forgery Detection (NOT STARTED)
+M18 — Performance Benchmarking (COMPLETE & VALIDATED)
 
 Overall Completion:
-M0–M10 Complete (11 of 19 milestones, 57.9%)
+M0–M18 Complete (19 of 20 milestones, 95.0%)
 
 Core Quantum Layer (M0–M7):
 COMPLETE & VALIDATED
@@ -85,14 +84,17 @@ COMPLETE & VALIDATED
 Statistical Evidence Engine (M10):
 COMPLETE & VALIDATED
 
-Threshold Policy & Decision Engine (M11–M12):
-NOT STARTED
+Statistical Threshold Policy (M11):
+COMPLETE & VALIDATED
 
-Attack Simulation (M13–M15):
-NOT STARTED
+Decision Engine (M12):
+COMPLETE & VALIDATED
 
-Evidence Fusion & Evaluation (M16–M18):
-NOT STARTED
+Attack Simulation & Protocol Security (M13–M15):
+COMPLETE & VALIDATED (M13, M14, M15)
+
+Evidence Fusion, Security Evaluation & Benchmarking (M16–M18):
+COMPLETE & VALIDATED (M16, M17, M18)
 
 Dashboard:
 PLANNED
@@ -101,7 +103,7 @@ Blockchain:
 DEFERRED
 ```
 
-The percentage is updated based on actual completed milestones (11/19 = 57.9%), not estimated effort.
+The percentage is updated based on actual completed milestones (19/20 = 95.0%), not estimated effort.
 
 ---
 
@@ -144,14 +146,14 @@ Implemented
 | M8  | Noise and channel imperfections | COMPLETE — REVIEWED & VALIDATED |
 | M9  | Honest baseline                | COMPLETE — REVIEWED & VALIDATED |
 | M10 | Statistical comparison engine | COMPLETE — REVIEWED & VALIDATED |
-| M11 | Forgery detection              | NOT STARTED |
-| M12 | Replay detection               | NOT STARTED |
-| M13 | Impersonation detection        | NOT STARTED |
-| M14 | Unauthorized verification      | NOT STARTED |
-| M15 | Quantum-channel attacks        | NOT STARTED |
-| M16 | Evidence fusion                | NOT STARTED |
-| M17 | Security evaluation            | NOT STARTED |
-| M18 | Performance evaluation         | NOT STARTED |
+| M11 | Threshold policy               | COMPLETE — REVIEWED & VALIDATED |
+| M12 | Decision engine                | COMPLETE — REVIEWED & VALIDATED |
+| M13 | Impersonation detection        | COMPLETE — REVIEWED & VALIDATED |
+| M14 | Unauthorized verification      | COMPLETE — REVIEWED & VALIDATED |
+| M15 | Quantum-channel attacks        | COMPLETE — REVIEWED & VALIDATED |
+| M16 | Evidence fusion                | COMPLETE — REVIEWED & VALIDATED |
+| M17 | Security evaluation            | COMPLETE — REVIEWED & VALIDATED |
+| M18 | Performance evaluation         | COMPLETE — REVIEWED & VALIDATED |
 | M19 | Dashboard                      | NOT STARTED |
 | M20 | Blockchain audit layer         | DEFERRED    |
 
@@ -1002,59 +1004,81 @@ COMPLETE — AUDITED, REVIEWED & VALIDATED
 
 ---
 
-# 17. M11 — Forgery Detection
+# 17. M11 — Statistical Threshold Policy
 
 ## Objective
 
-Detect invalid or manipulated signatures.
+Transform M10 descriptive statistical evidence into calibrated, configuration-specific threshold evidence bound to honest operating conditions.
 
-### Attack scenarios
+### Architectural Deliverables
 
-* [ ] Wrong quantum state
-* [ ] Modified signature
-* [ ] Incorrect message-signature relationship
-* [ ] Invalid signature sequence
+* [x] **Threshold Policy Data Model:** Immutable `MetricThreshold`, `ThresholdPolicy`, `MetricThresholdEvaluation`, and `PolicyEvaluationReport` frozen dataclasses.
+* [x] **Direction Conventions:** Physical degradation semantics encoded as `ThresholdDirection.LOWER` (fidelity) and `ThresholdDirection.UPPER` (QBER, TVD, absolute deviations).
+* [x] **Signed Observables & Deviation Thresholds:** Pauli expectations and Bell correlations are signed in $[-1.0, 1.0]$. Calibrated and evaluated as baseline absolute deviations ($|x - \mu_{\text{base}}|$) with `UPPER` direction across all Pauli eigenstates and all four Bell states ($\Phi^+, \Phi^-, \Psi^+, \Psi^-$).
+* [x] **Individual Probability Deviation Thresholds:** Born probability outcomes thresholded via absolute deviations ($|p - \mu_p|$) with `UPPER` direction, supporting both collective basis TVD and outcome-specific deviations.
+* [x] **Empirical Quantile Calibration:** Non-parametric $Q_{\alpha}$ and $Q_{1 - \alpha}$ quantile derivation (`method='linear'`) for bounded quantum metrics.
+* [x] **Parametric Multiplier Support:** Secondary $\mu \pm k\sigma$ derivation with physical domain clamping and boundary saturation transparency.
+* [x] **Small-N Policy & Reliability Distinction:** Distinguishes computational feasibility ($N \ge 2$) from statistical reliability ($N \ge \max(10, \lceil 1/\alpha \rceil)$), embedding reliability metadata in thresholds.
+* [x] **Strict Configuration Binding:** Policies tied to `baseline_configuration_hash`; mismatches rejected with `ConfigurationCompatibilityError`.
+* [x] **Deterministic Policy Fingerprint:** SHA-256 canonical digest computed across sorted policy threshold parameters.
+* [x] **Exact Boundary Handling:** Rigorous $\text{atol} = 10^{-9}$ numerical boundary convention distinguishing strictly inside, strictly exceeded, and at boundary.
+* [x] **Data Leakage Prevention:** Deep item-level overlap check in false-alarm rate estimation ensuring validation observations are strictly separate from calibration observations.
+* [x] **Scope Boundary Enforcement:** Strictly NO final security verdicts (`ACCEPT`/`SUSPICIOUS`/`ATTACK`), NO attack detection, and NO AI/ML (deferred strictly to M12+).
 
-### Metrics
+### Test & Validation Summary
 
-* [ ] Detection rate
-* [ ] FAR
-* [ ] Empirical forgery probability
+* **Unit & Integration Tests:** 64 dedicated M11 tests in `tests/test_thresholds.py` covering threshold construction, input validation, boundary behavior, configuration compatibility, immutability, small-sample handling, bounded metrics, sensitivity analysis, FAR evaluation, Bugs A through X, and the Section 19 Scientific Audit Suite (Pauli +/-1 deviations, Bell correlations for all 4 states, probability deviations in both directions, absence of re-deviation, known synthetic quantile verification, and container-copy data leakage detection).
+* **Full Regression:** 540 passed in 21.17s with 0 warnings (`pytest -v -W error`).
+* **Static Type Checking:** 0 errors, 0 warnings, 0 informations (`cmd.exe /c "npx -y pyright src tests"`).
+* **Governing Decision:** DEC-058 (`Project_Instructions/DECISIONS.md`).
 
 ### Status
 
 ```text
-NOT STARTED
+COMPLETE — SCIENTIFICALLY AUDITED, REVIEWED & VALIDATED
 ```
 
 ---
 
-# 18. M12 — Replay Detection
+# 18. M12 — Decision Engine
 
 ## Objective
 
-Detect reuse of a previously valid verification request.
+Convert statistical evidence (M10), threshold evaluation reports (M11), and available protocol security evidence into a deterministic security verdict: `ACCEPT`, `SUSPICIOUS`, or `ATTACK`.
 
 ### Tasks
 
-* [ ] Store session
-* [ ] Store nonce
-* [ ] Store verification history
-* [ ] Detect reused nonce/session
-* [ ] Reject replay
-* [ ] Generate evidence
+* [x] Define `DecisionVerdict` enum (`ACCEPT`, `SUSPICIOUS`, `ATTACK`)
+* [x] Define `DecisionReasonCode` StrEnum with stable, canonical reason codes
+* [x] Define `ProtocolSecurityEvidence` frozen dataclass for explicit violation signals
+* [x] Define `DecisionResult` frozen dataclass capturing complete, explainable decision trace
+* [x] Implement `evaluate_security_decision()` deterministic decision engine
+* [x] Enforce deterministic rule precedence hierarchy:
+  1. Confirmed Explicit Security Violation → `ATTACK`
+  2. Configuration Context Incompatibility → `SUSPICIOUS`
+  3. Incomplete or Indeterminate Evidence → `SUSPICIOUS`
+  4. Statistical Anomaly / Threshold Exceedance → `SUSPICIOUS`
+  5. Clean, complete evidence within policy → `ACCEPT`
+* [x] Scientific boundary enforcement: Anomaly $\ne$ Attack (threshold crossing alone never produces `ATTACK`)
+* [x] Strictly prohibit composite security scores (no `security_score`, `trust_score`, `risk_score`, or weighted metrics)
+* [x] Implement `evaluate_decision_from_evidence()` adapter consuming M10/M11 outputs
+* [x] Enforce configuration binding validation between M11 policy and evaluation evidence
+* [x] Preserve individual exceeded metric names and deterministic sorting
+* [x] Comprehensive test suite covering basic decisions, precedence, missing evidence, immutability, and end-to-end integration
 
 ### Expected behaviour
 
 ```text
-First request → ACCEPT
-Replay → ATTACK
+Clean honest evidence within policy → ACCEPT
+Threshold exceedance + no explicit violation → SUSPICIOUS
+Missing / incomplete required evidence → SUSPICIOUS
+Explicit confirmed violation signal → ATTACK
 ```
 
 ### Status
 
 ```text
-NOT STARTED
+COMPLETE — REVIEWED & VALIDATED
 ```
 
 ---
@@ -1063,21 +1087,37 @@ NOT STARTED
 
 ## Objective
 
-Detect an attacker claiming to be another signer.
+Detect an entity attempting to participate in or authenticate within the Q-SHIELD protocol while claiming an identity that it is not legitimately authorized or authenticated to represent.
 
 ### Tasks
 
-* [ ] Define signer identity
-* [ ] Define attacker identity
-* [ ] Validate identity
-* [ ] Validate authorization
-* [ ] Combine identity and signature evidence
-* [ ] Generate security decision
+* [x] Define `IdentityEvidenceStatus` enum (`VALID`, `IDENTITY_MISMATCH`, `AUTHENTICATION_FAILED`, `INCOMPLETE`, `CONFLICTING`, `INCOMPATIBLE_CONTEXT`)
+* [x] Define `ImpersonationReasonCode` StrEnum with stable, canonical reason codes
+* [x] Define `IdentityClaim` frozen dataclass for participant identity claims
+* [x] Define `AuthenticationEvidence` frozen dataclass for explicit credential evaluation facts
+* [x] Define `ImpersonationEvidence` frozen dataclass capturing categorical status and M12 conversion contract
+* [x] Implement `detect_impersonation()` deterministic validation engine
+* [x] Implement `evaluate_impersonation_decision()` integration adapter connecting M13 -> M12
+* [x] Enforce scientific distinction: Quantum Anomaly $\ne$ Impersonation (noise/decoherence/threshold crossings alone never produce impersonation)
+* [x] Enforce distinction between missing evidence (INCOMPLETE $\to$ M12 SUSPICIOUS) and failed authentication (AUTHENTICATION_FAILED $\to$ M12 ATTACK)
+* [x] Enforce independence of impersonation detection from quantum threshold statistics
+* [x] Strictly prohibit composite security/trust/risk scores
+* [x] Comprehensive test suite covering Scenarios A–G, edge cases, immutability, determinism, and full M0–M13 regression
+
+### Expected behaviour
+
+```text
+Legitimate participant + valid authentication → VALID → M12 ACCEPT
+Identity mismatch (claimed != expected / claimed != authenticated) → MISMATCH → M12 ATTACK
+Explicit failed authentication (is_authenticated=False) → AUTHENTICATION_FAILED → M12 ATTACK
+Missing / incomplete authentication evidence → INCOMPLETE → M12 SUSPICIOUS (never ATTACK)
+Valid identity + quantum measurement anomaly → VALID (M13) + SUSPICIOUS (M12 via M11)
+```
 
 ### Status
 
 ```text
-NOT STARTED
+COMPLETE — REVIEWED & VALIDATED
 ```
 
 ---
@@ -1086,53 +1126,120 @@ NOT STARTED
 
 ## Objective
 
-Prevent unauthorized participants from performing protected verification operations.
+Prevent unauthorized participants from performing protected verification operations by evaluating authenticated identity, requested operation, role, resource, and security context against deterministic verification policies.
 
 ### Tasks
 
-* [ ] Define verifier roles
-* [ ] Define authorization rules
-* [ ] Validate authorization
-* [ ] Reject unauthorized requests
-* [ ] Generate evidence
+* [x] Define `VerificationOperation` enum (`VERIFY`, `VERIFY_TELEPORTATION`, `AUDIT_VERIFICATION`)
+* [x] Define `AuthorizationStatus` enum (`AUTHORIZED`, `UNAUTHORIZED`, `INCOMPLETE`, `INCOMPATIBLE_CONTEXT`, `CONFLICTING`)
+* [x] Define `AuthorizationReasonCode` StrEnum with stable, canonical reason codes
+* [x] Define `VerificationPolicy` frozen dataclass for authorization policy rules
+* [x] Define `AuthorizationRequest` frozen dataclass for verification request submissions
+* [x] Define `AuthorizationEvidence` frozen dataclass capturing categorical status, reasons, and M12 conversion contract
+* [x] Implement `evaluate_verification_authorization()` deterministic validation engine
+* [x] Implement `evaluate_authorization_decision()` integration adapter connecting M14 -> M12
+* [x] Enforce scientific distinction: Quantum Anomaly $\ne$ Unauthorized Verification (quantum physical noise alone never produces authorization denial)
+* [x] Enforce distinction between missing evidence (INCOMPLETE $\to$ M12 SUSPICIOUS) and explicit denial (UNAUTHORIZED $\to$ M12 ATTACK)
+* [x] Enforce authentication vs. authorization boundary (M13 identity validation vs. M14 permission evaluation)
+* [x] Enforce scope boundaries: no replay detection, no impersonation detection, no channel attack detection
+* [x] Strictly prohibit composite security/trust/risk scores
+* [x] Enforce zero secret leakage by rejecting raw credentials in metadata
+* [x] Comprehensive test suite covering Scenarios A–H, 28 adversarial tests, immutability, determinism, and full M0–M14 regression
+
+### Expected behaviour
+
+```text
+Authorized participant + allow policy → AUTHORIZED → M12 ACCEPT
+Explicit policy denial (denied identity / denied role) → UNAUTHORIZED → M12 ATTACK
+Missing / empty authorization policy → INCOMPLETE → M12 SUSPICIOUS (never ATTACK)
+Unauthorized role (e.g. SIGNER attempting VERIFY) → UNAUTHORIZED → M12 ATTACK
+Authorized identity + quantum measurement anomaly → AUTHORIZED (M14) + SUSPICIOUS (M12 via M11)
+Unauthorized identity + clean quantum evidence → UNAUTHORIZED (M14) → M12 ATTACK
+Context / session / configuration mismatch → INCOMPATIBLE_CONTEXT → M12 SUSPICIOUS
+Unrelated operation (e.g. SIGN) → INCOMPATIBLE_CONTEXT (never flagged as unauthorized verification attack)
+```
 
 ### Status
 
 ```text
-NOT STARTED
+COMPLETE — REVIEWED & VALIDATED
 ```
 
 ---
 
-# 21. M15 — Quantum-Channel Attacks
+# 21. M15 — Quantum-Channel Attacks & Anomaly Detection
 
 ## Objective
 
-Simulate manipulation of quantum communication.
+Deterministically evaluate whether observed quantum communication telemetry (QBER, teleportation fidelity, Bell correlations, Born measurement distributions / TVD, and Pauli expectation values) is inconsistent with the expected honest quantum channel baseline.
 
-### Initial attack types
+### Core Pipeline Placement
 
-* [ ] Bit flip
-* [ ] Phase flip
-* [ ] Y-type manipulation
-* [ ] Depolarizing disturbance
-* [ ] Other explicitly documented attacks
+```text
+Quantum Protocol (M1–M7)
+       ↓
+Measurements / Telemetry
+       ↓
+M8 Noise + M9 Honest Baseline
+       ↓
+M10 Statistical Comparison (StatisticalEvidence)
+       ↓
+M11 Threshold Policy Evaluation (PolicyEvaluationReport)
+       ↓
+M15 Quantum Channel Attack Detection (ChannelSecurityEvidence)
+       ↓
+M12 Deterministic Decision Engine (ACCEPT / SUSPICIOUS / ATTACK)
+```
 
 ### Tasks
 
-* [ ] Define attack parameters
-* [ ] Apply manipulation
-* [ ] Run verification
-* [ ] Calculate quantum metrics
-* [ ] Compare against baseline
-* [ ] Detect anomaly
-* [ ] Measure ADR/FAR
+* [x] Define `ChannelEvidenceStatus` enum (`CLEAN`, `ANOMALOUS`, `SECURITY_VIOLATION`, `INCOMPLETE`, `INCOMPATIBLE_CONTEXT`, `CONFLICTING`)
+* [x] Define `ChannelReasonCode` StrEnum with stable canonical reason codes
+* [x] Define `ChannelSecurityEvidence` frozen dataclass for quantum channel security findings
+* [x] Implement `detect_channel_anomalies()` deterministic evaluation engine
+* [x] Implement `evaluate_channel_attack_decision()` integration adapter bridging M15 -> M12
+* [x] Zero duplicate calculations: directly consume M10 `StatisticalEvidence` and M11 `PolicyEvaluationReport`
+* [x] Multi-signal evidence accumulation without "first error wins" (collects all exceeded metrics deterministically)
+* [x] Preserve `MULTI_METRIC_CHANNEL_DISTURBANCE` when multiple distinct physical signals deviate
+* [x] Enforce scientific distinction: Statistical Anomaly $\ne$ Proven Attacker Identity (owned by M13)
+* [x] Enforce scientific distinction: Channel Anomaly $\ne$ Unauthorized Verification (owned by M14)
+* [x] Enforce noise model boundary: calibrated operational noise (M8/M9) produces `CLEAN` (M12 `ACCEPT`)
+* [x] Enforce context binding: SHA-256 baseline configuration hash and session identifier matching
+* [x] Enforce missing evidence semantics: missing telemetry produces `INCOMPLETE` (M12 `SUSPICIOUS`, never `ATTACK`)
+* [x] Strictly prohibit composite security scores (zero `risk_score`, `trust_score`, or scalar collapsing)
+* [x] Enforce zero secret leakage by rejecting raw credentials in metadata
+* [x] Full test suite (52 tests in `tests/test_channel_attack.py`, 706 total tests passing in full regression)
+* [x] Static type checking validation (Pyright: 0 errors, 0 warnings, 0 informations)
+
+### Expected behaviour
+
+```text
+Clean honest channel within policy → CLEAN → M12 ACCEPT
+Channel threshold exceedance (QBER, Bell, fidelity) → ANOMALOUS → M12 SUSPICIOUS
+Missing / incomplete channel evidence → INCOMPLETE → M12 SUSPICIOUS (never ATTACK)
+Context / session / configuration mismatch → INCOMPATIBLE_CONTEXT → M12 SUSPICIOUS
+Explicit confirmed channel security violation → SECURITY_VIOLATION → M12 ATTACK
+```
 
 ### Status
 
 ```text
-NOT STARTED
+COMPLETE — AUDITED, CORRECTED, REGRESSION VALIDATED & FROZEN
 ```
+
+### Implementation Details
+
+* **Files Created/Modified:**
+  * Created: `src/detection/channel.py` (audited, bug-corrected, deep-freezing, secret guard, adapter session-binding)
+  * Modified: `src/detection/__init__.py`
+  * Created: `tests/test_channel_attack.py` (expanded to 70 tests across 20 suites)
+  * Modified: `Project_Instructions/DECISIONS.md` (Added DEC-062, updated Principle 63)
+  * Modified: `Project_Instructions/PROGRESS.md` (Updated Sections 3, 5, 21)
+  * Modified: `walkthrough.md`
+* **Test Suite:**
+  * `tests/test_channel_attack.py`: 70 tests passing
+  * Full regression: 724 tests passing in 6.95s under `pytest -v -W error` (0 warnings, 0 skips, 0 failures)
+  * Pyright static analysis: 0 errors, 0 warnings, 0 informations across `src` and `tests`
 
 ---
 
@@ -1153,26 +1260,53 @@ Statistical
 
 ### Tasks
 
-* [ ] Define evidence schema
-* [ ] Define deterministic rules
-* [ ] Combine evidence
-* [ ] Generate explanation
-* [ ] Test conflicting evidence
-* [ ] Test unknown anomalies
+* [x] Define evidence schema (`FusedSecurityEvidence`, `EvidenceSource`, `FusedEvidenceStatus`, `FusionReasonCode`)
+* [x] Define deterministic aggregation rules and status precedence hierarchy
+* [x] Combine evidence from M13 (Impersonation), M14 (Unauthorized Verification), and M15 (Quantum Channel Attacks)
+* [x] Generate machine-readable reason codes and preserve source-level provenance without loss of explainability
+* [x] Context and configuration binding: audit session ID and canonical SHA-256 configuration hash compatibility
+* [x] Missing evidence handling: missing required sources produce `INCOMPLETE` (M12 `SUSPICIOUS`, never `ATTACK`)
+* [x] Anomaly preservation: physical channel anomalies preserved as `ANOMALOUS` (M12 `SUSPICIOUS`, never upgraded to attack)
+* [x] Explicit violation preservation: multiple independent explicit violations preserved without "first violation wins" or overwrite
+* [x] Conflict handling: contradictory lower-layer evidence or cross-source context conflicts produce `CONFLICTING` (M12 `SUSPICIOUS`)
+* [x] Implement M12 bridge (`FusedSecurityEvidence.to_protocol_security_evidence()`, `evaluate_fused_security_decision()`)
+* [x] Deep immutability and defensive copying (frozen dataclass, recursive deep copy of metadata)
+* [x] Defensive secret-key leakage guard (rejects secret/credential keywords in metadata)
+* [x] Zero composite scoring: no risk scores, trust scores, weighted combinations, Bayesian models, or ML
+* [x] Complete automated test suite: 32 tests in `tests/test_evidence_fusion.py`
+* [x] Full regression test suite: 756 tests passing under `pytest -v -W error`
+* [x] Static type analysis: Pyright reports 0 errors, 0 warnings, 0 informations
 
 ### Expected outputs
 
 ```text
-ACCEPT
-SUSPICIOUS
-ATTACK
+All required evidence clean → CLEAN → M12 ACCEPT
+Statistical / physical channel anomaly → ANOMALOUS → M12 SUSPICIOUS
+Missing required source evidence → INCOMPLETE → M12 SUSPICIOUS (never ATTACK)
+Incompatible context / session / config → INCOMPATIBLE_CONTEXT → M12 SUSPICIOUS
+Contradictory / conflicting assertions → CONFLICTING → M12 SUSPICIOUS
+Explicit security violation (M13/M14/M15) → SECURITY_VIOLATION → M12 ATTACK
 ```
 
 ### Status
 
 ```text
-NOT STARTED
+COMPLETE — REVIEWED, REGRESSION VALIDATED & FROZEN
 ```
+
+### Implementation Details
+
+* **Files Created/Modified:**
+  * Created: `src/detection/fusion.py`
+  * Modified: `src/detection/__init__.py`
+  * Created: `tests/test_evidence_fusion.py` (43 comprehensive tests across 13 suites)
+  * Modified: `Project_Instructions/DECISIONS.md` (Updated DEC-063, updated Principle 64)
+  * Modified: `Project_Instructions/PROGRESS.md` (Updated Sections 3, 5, 22)
+  * Modified: `walkthrough.md`
+* **Test Suite:**
+  * `tests/test_evidence_fusion.py`: 43 tests passing
+  * Full regression: 767 tests passing in 6.80s under `pytest -v -W error` (0 warnings, 0 skips, 0 failures)
+  * Pyright static analysis: 0 errors, 0 warnings, 0 informations across `src` and `tests`
 
 ---
 
@@ -1180,33 +1314,56 @@ NOT STARTED
 
 ## Objective
 
-Evaluate actual detection performance.
+Evaluate actual detection performance and security behavior of the Q-SHIELD detection pipeline under controlled, reproducible security scenarios.
 
-### Required metrics
+### Evaluation Categories & Tasks
 
-* [ ] LAR
-* [ ] FRR
-* [ ] FAR
-* [ ] ADR
-* [ ] Empirical forgery probability
+* [x] Category 1: Clean / Honest scenario evaluation (`ACCEPT`)
+* [x] Category 2: Benign noise / calibrated variation scenario evaluation (`ACCEPT`)
+* [x] Category 3: Impersonation scenario evaluation (M13 `ATTACK`)
+* [x] Category 4: Unauthorized verification scenario evaluation (M14 `ATTACK`)
+* [x] Category 5: Quantum channel anomaly scenario evaluation (M15 `SUSPICIOUS`)
+* [x] Category 6: Explicit quantum channel security violation evaluation (M15 `ATTACK`)
+* [x] Category 7: Incomplete evidence scenario evaluation (`SUSPICIOUS`, never clean)
+* [x] Category 8: Incompatible session / configuration scenario evaluation (`SUSPICIOUS`)
+* [x] Category 9: Conflicting evidence scenario evaluation (`SUSPICIOUS` or `ATTACK` if violation present)
+* [x] Category 10: Multi-source security violation combinations (Combinations A through J)
+* [x] Immutability & defensive secret leakage protection (`EvaluationScenario`, `EvaluationResult`)
+* [x] Dataset-bound categorical metrics & confusion matrix (TP, FN, FP, TN, Sensitivity, Specificity)
+* [x] Continuation on failure (no early exit) & bit-for-bit determinism (no wall-clock timestamps)
+* [x] Strict scientific claim discipline (no 100% security or real-world probability claims)
+* [x] M12 decision authority preserved (zero duplicate decision logic)
 
-### Experiments
+### Expected outputs
 
-* [ ] Honest baseline
-* [ ] Forgery
-* [ ] Replay
-* [ ] Impersonation
-* [ ] Unauthorized verification
-* [ ] Quantum-channel attacks
-* [ ] Attack-strength sweep
-* [ ] Threshold sensitivity
-* [ ] Security operating region
+```text
+Expected ACCEPT and Observed ACCEPT → PASS
+Expected SUSPICIOUS and Observed SUSPICIOUS → PASS
+Expected ATTACK and Observed ATTACK → PASS
+Mismatch between Expected and Observed → FAIL (with granular explanation & provenance)
+Confusion Matrix & Count-Based Metrics strictly bound to defined evaluation dataset
+```
 
 ### Status
 
 ```text
-NOT STARTED
+COMPLETE — REVIEWED, REGRESSION VALIDATED & FROZEN
 ```
+
+### Implementation Details
+
+* **Files Created/Modified:**
+  * Created/Modified: `src/evaluation/security_evaluation.py`
+  * Modified: `src/evaluation/__init__.py`
+  * Created/Modified: `tests/test_security_evaluation.py` (46 comprehensive tests across 10 suites)
+  * Modified: `Project_Instructions/DECISIONS.md` (Added DEC-064, renumbered Section 65)
+  * Modified: `Project_Instructions/PROGRESS.md` (Updated Sections 3, 5, 23)
+  * Modified: `walkthrough.md`
+* **Test Suite:**
+  * `tests/test_security_evaluation.py`: 46 tests passing
+  * Subsystem regression (M12, M13, M14, M15, M16): 227 tests passing under `pytest -v -W error`
+  * Full regression: 813 tests passing in 6.76s under `pytest -v -W error` (0 warnings, 0 skips, 0 failures)
+  * Pyright static analysis: 0 errors, 0 warnings, 0 informations across `src` and `tests`
 
 ---
 
@@ -1214,25 +1371,77 @@ NOT STARTED
 
 ## Objective
 
-Measure computational efficiency.
+Measure operational latency, throughput, and workload scaling of the completed Q-SHIELD detection and evaluation pipeline under controlled, reproducible conditions.
+
+### Architectural Position
+
+```text
+Quantum Protocol
+      ↓
+M8/M9 — Noise + Honest Baseline
+      ↓
+M10 — Statistical Comparison
+      ↓
+M11 — Threshold Policy
+      ↓
+M13 — Impersonation Detection
+M14 — Authorization Detection
+M15 — Channel Attack Detection
+      ↓
+M16 — Evidence Fusion
+      ↓
+M12 — Final Security Decision
+      ↓
+M17 — Security Evaluation
+      ↓
+M18 — Benchmarking (THIS MODULE)
+```
 
 ### Tasks
 
-* [ ] Baseline verification runtime
-* [ ] Shot-count benchmark
-* [ ] State-count benchmark
-* [ ] Noise benchmark
-* [ ] Attack benchmark
-* [ ] Statistical detection overhead
-* [ ] Batch benchmark
-* [ ] Memory measurement
-* [ ] Optional GPU benchmark
+* [x] Category A: Baseline honest scenario operational latency (`BASELINE_EVALUATION`)
+* [x] Category B: Suspicious channel anomaly evaluation latency (`SUSPICIOUS_EVALUATION`)
+* [x] Category C: Explicit security violation evaluation latency (`ATTACK_EVALUATION`)
+* [x] Category D: Tri-source evidence fusion throughput & latency (`EVIDENCE_FUSION`)
+* [x] Category E: Scenario workload batch scaling ($N=1, 10, 50, 100$) (`SCENARIO_SCALING`)
+* [x] Category F: End-to-end evaluation suite execution (`END_TO_END_PIPELINE`)
+* [x] High-resolution monotonic timing (`time.perf_counter()`) and CPU time tracking (`time.process_time()`)
+* [x] Warmup iteration execution with strict exclusion from measured latency and throughput statistics
+* [x] Zero-denominator safety (iterations=0 produces `None`, never fabricated metrics)
+* [x] Observational M12 verdict distribution recording with strict prohibition of security/risk scoring
+* [x] Immutability & recursive secret leakage protection (`BenchmarkScenario`, `BenchmarkResult`, `BenchmarkSuiteResult`)
+* [x] Suite aggregation with stable identifier retrieval (`results_by_id`, `get_result(benchmark_id)`)
+* [x] Standardized baseline benchmark suite factory (`build_baseline_benchmark_suite`)
+
+### Expected outputs
+
+```text
+Monotonic Latency Metrics: min, max, mean, median, p95 (seconds)
+Throughput: operations / second
+Observational Verdict Counts: ACCEPT, SUSPICIOUS, ATTACK (purely observational, zero scoring)
+Suite Aggregation: total, successful, failed benchmarks, retrievable by stable ID
+Zero-Denominator: returns None when measured iterations or elapsed time are 0
+```
 
 ### Status
 
 ```text
-NOT STARTED
+COMPLETE — REVIEWED, REGRESSION VALIDATED & FROZEN
 ```
+
+### Implementation Details
+
+* **Files Created/Modified:**
+  * Created: `src/benchmarking/__init__.py`
+  * Created: `src/benchmarking/benchmark.py`
+  * Created: `tests/test_benchmarking.py` (66 comprehensive tests across 7 test suites)
+  * Modified: `Project_Instructions/DECISIONS.md` (Added DEC-065, renumbered Section 66)
+  * Modified: `Project_Instructions/PROGRESS.md` (Updated Sections 3, 5, 24)
+  * Modified: `walkthrough.md`
+* **Test Suite:**
+  * `tests/test_benchmarking.py`: 66 tests passing
+  * Full regression: 879 tests passing in 7.01s under `pytest -v -W error` (0 warnings, 0 skips, 0 failures)
+  * Static type analysis: Pyright reports 0 errors, 0 warnings, 0 informations across `src` and `tests`
 
 ---
 

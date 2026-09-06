@@ -1448,9 +1448,605 @@ The M10 statistical comparison engine shall strictly validate all candidate prob
 3. Outcome keys must be strictly validated as strings, and probability values must be finite floats within $[0.0, 1.0]$.
 4. Configuration compatibility checks must evaluate both observation configuration dictionaries and direct `observation.shots` values against baseline operating parameters.
 
+# 58. DEC-058 — Statistical Threshold Policy Architecture, Empirical Quantile Calibration, Configuration Binding, Exact Boundary Conventions, and Strict Scope Isolation (Milestone M11)
+
+**Status:** ACCEPTED (Milestone M11)
+
+### Decision
+
+1. **Purpose and Boundaries of the Threshold Policy Layer:**
+   Milestone M11 establishes the statistical threshold policy layer that consumes M9 honest baselines and M10 statistical evidence to determine whether newly observed metrics cross calibrated operational boundaries.
+   $$\text{M9 Honest Baseline} + \text{Honest Observations} \implies \text{M11 Threshold Policy} \implies \text{Threshold Evidence}$$
+   - M11 produces **calibrated threshold evidence only** (`exceeded = True/False`, `margin`, `boundary_status`).
+   - M11 contains **strictly NO final security verdicts** (`ACCEPT`, `SUSPICIOUS`, `ATTACK`) — strictly reserved for M12.
+   - M11 contains **strictly NO attack detection, forgery detection, replay detection, impersonation detection, or classification**.
+   - M11 contains **strictly NO AI/ML, neural networks, or composite "security scores"**.
+
+2. **Raw Metric vs. Deviation Metric Semantics (Comprehensive Calibration Table):**
+   The threshold policy strictly differentiates metrics evaluated on raw values from signed/symmetric metrics evaluated on baseline deviations:
+
+   | Metric Name | Thresholded Quantity | Threshold Direction | Scientific Rationale |
+   | :--- | :--- | :--- | :--- |
+   | **Fidelity** (`fidelity:{state}`) | Raw observed value $F \in [0, 1]$ | **LOWER** ($T = Q_\alpha$) | Honest behavior is high ($F \approx 1.0$); physical degradation drops fidelity below $T$. |
+   | **QBER** (`qber:{state}`) | Raw observed error rate $\in [0, 1]$ | **UPPER** ($T = Q_{1-\alpha}$) | Honest error is low ($\approx 0.0$); channel disruption or noise increases QBER above $T$. |
+   | **TV Distance** (`probabilities_{basis}:{state}`) | Distributional deviation $TV(P_{\text{obs}}, P_{\text{base}})$ | **UPPER** ($T = Q_{1-\alpha}$) | Total variation distance is non-negative ($0 \le TV \le 1$); larger values indicate greater distributional shift. |
+   | **Pauli Expectations** (`pauli_{op}:{state}`) | Absolute deviation $|\langle \sigma \rangle - \mu_{\text{base}}|$ | **UPPER** ($T = Q_{1-\alpha}$) | Signed in $[-1, +1]$ ($+1$ for $\|0\rangle$, $-1$ for $\|1\rangle$). Raw directional thresholding fails; absolute deviation $|x - \mu|$ detects shifts in either direction. |
+   | **Bell Correlations** (`bell_{xx,yy,zz}`) | Absolute deviation $\|\langle O \rangle - \mu_{\text{base}}\|$ | **UPPER** ($T = Q_{1-\alpha}$) | Theoretical correlations can be $+1.0$ or $-1.0$ across Bell states ($\Phi^+, \Phi^-, \Psi^+, \Psi^-$). Deviation $\|\langle O \rangle - \mu\|$ detects decoherence towards 0 symmetrically. |
+   | **Individual Probabilities** (`prob_dev_{basis}_{outcome}:{state}`) | Absolute deviation $\|p - \mu_p\|$ | **UPPER** ($T = Q_{1-\alpha}$) | Expected honest probabilities can be $0.5, 1.0, 0.0$. Anomaly is an absolute shift $\|p - \mu_p\|$ exceeding calibrated upper tolerance. |
+   | **Generic Absolute Deviation** (`{metric}:abs_dev`) | M10 absolute deviation $\|x - \mu\|$ | **UPPER** ($T = Q_{1-\alpha}$) | Evaluates M10 absolute deviation directly without applying a second baseline subtraction ($d \le T$). |
+
+3. **Empirical Quantile Calibration (Primary Method for Bounded Quantum Metrics):**
+   Because quantum verification metrics (overlap fidelity $F \in [0, 1]$, QBER $\in [0, 1]$, total variation distance $TVD \in [0, 1]$, and expectation deviations) are non-Gaussian and strictly bounded, non-parametric empirical quantiles from honest calibration observations provide the most robust operational boundaries:
+   - For **LOWER**-tail metrics (e.g. Fidelity): $T = Q_{\alpha}(\{x_1, \dots, x_N\})$, where observed $x < T$ indicates degradation.
+   - For **UPPER**-tail metrics (e.g. QBER, TVD, absolute deviations): $T = Q_{1 - \alpha}(\{x_1, \dots, x_N\})$, where observed $x > T$ indicates degradation.
+   - Linear interpolation: NumPy `method='linear'` is the standard, deterministic quantile convention.
+
+4. **Parametric Statistical Multiplier ($\mu \pm k\sigma$) & Clamping Transparency:**
+   For approximately continuous metrics where baseline sample variance is available:
+   - LOWER threshold: $T = \max(0.0, \mu - k\sigma)$ (for metrics with physical bound at 0.0)
+   - UPPER threshold: $T = \min(1.0, \mu + k\sigma)$ (for metrics with physical bound at 1.0)
+   - Note: If clamping occurs at $1.0$ for an upper threshold, strict exceedance ($x > 1.0 + \text{atol}$) becomes uncrossable for bounded metrics. Empirical quantiles are therefore preferred over parametric multipliers for bounded quantum metrics.
+
+5. **Small-Sample Policy & Statistical Reliability Distinction:**
+   - $N = 0$: Rejected immediately with `ValueError`.
+   - $N = 1$: Rejected immediately with `ValueError` ("Insufficient calibration samples (N=1). Minimum N >= 2 is required for statistical threshold calibration").
+   - $N \ge 2$: Mathematically computable (computational minimum for sample variance and linear quantile). When $N < \max(10, \lceil 1/\alpha \rceil)$, metadata flags `statistical_reliability = "low_sample_count"`.
+   - $N \ge \max(10, \lceil 1/\alpha \rceil)$: Sufficient sample support for extreme quantile estimation, flagged as `statistical_reliability = "statistically_reliable"`.
+
+6. **Exact Boundary Behavior and Tolerance:**
+   To avoid ambiguous floating-point equality near thresholds, a numerical boundary tolerance ($\text{atol} = 10^{-9}$) is strictly enforced:
+   - For UPPER threshold:
+     - $x > T + \text{atol} \implies \text{exceeded} = \text{True}, \text{boundary\_status} = \text{'strictly\_exceeded'}$
+     - $|x - T| \le \text{atol} \implies \text{exceeded} = \text{False}, \text{boundary\_status} = \text{'at\_boundary'}$
+     - $x < T - \text{atol} \implies \text{exceeded} = \text{False}, \text{boundary\_status} = \text{'strictly\_inside'}$
+   - For LOWER threshold:
+     - $x < T - \text{atol} \implies \text{exceeded} = \text{True}, \text{boundary\_status} = \text{'strictly\_exceeded'}$
+     - $|x - T| \le \text{atol} \implies \text{exceeded} = \text{False}, \text{boundary\_status} = \text{'at\_boundary'}$
+     - $x > T + \text{atol} \implies \text{exceeded} = \text{False}, \text{boundary\_status} = \text{'strictly\_inside'}$
+   - Signed Exceedance Margin:
+     - UPPER: $margin = x - T$ (positive indicates exceedance)
+     - LOWER: $margin = T - x$ (positive indicates exceedance)
+
+7. **Configuration Binding & Deterministic Fingerprinting:**
+   - Every `ThresholdPolicy` is strictly bound to the `baseline_configuration_hash` of its generating M9 baseline.
+   - Evaluations check configuration compatibility and reject mismatched operating conditions with `ConfigurationCompatibilityError`.
+   - Policies compute a canonical SHA-256 `policy_fingerprint` across sorted threshold parameters to guarantee immutable provenance and detect any policy drift.
+
+8. **Data Leakage Prevention in False-Alarm Rate Estimation:**
+   - Empirical false-alarm rate (FAR) evaluation functions require separate held-out validation observations.
+   - Deep element-level identity checks verify that no calibration observation objects are present in the validation dataset, preventing subtle data leakage from container copying or slicing.
+
 ---
 
-# 58. Final Decision Principle
+# 59. DEC-059 — Deterministic Security Decision Engine Architecture, Precedence, Anomaly vs. Attack Distinction, and Absence of Composite Scoring (Milestone M12)
+
+**Status:** ACCEPTED (Milestone M12)
+
+### Decision
+
+1. **Deterministic Verdict Model:**
+   Milestone M12 establishes the deterministic security decision engine that consumes M10 statistical evidence, M11 threshold policy evaluation reports, and protocol security evidence to produce unambiguous security verdicts:
+   $$\text{Evidence (M10, M11, Protocol)} \implies \text{M12 Decision Engine} \implies \text{ACCEPT} \mid \text{SUSPICIOUS} \mid \text{ATTACK}$$
+   - Output states are strictly: `ACCEPT`, `SUSPICIOUS`, `ATTACK`.
+   - Security verdicts are explainable state classifications, NOT statistical measurements and NOT arbitrary scalar scores.
+
+2. **Strict Scientific Distinction: Anomaly $\ne$ Confirmed Attack:**
+   - Threshold crossing means: *The observation deviated beyond the calibrated honest operating region.*
+   - An anomaly indicates unexpected or anomalous physical/statistical behavior; it does NOT constitute proof of an adversarial attack.
+   - Therefore:
+     $$\text{Threshold Exceeded} + \text{No Explicit Violation} \implies \text{SUSPICIOUS}$$
+     $$\text{Threshold Exceeded} \not\implies \text{ATTACK}$$
+   - `ATTACK` is strictly reserved for deterministic, confirmed protocol/security violations.
+
+3. **Deterministic Rule Hierarchy and Precedence:**
+   The evaluation precedence is strictly ordered and non-probabilistic:
+   ```text
+   CONFIRMED EXPLICIT SECURITY VIOLATION
+           ↓
+         ATTACK
+   
+   INCOMPATIBLE CONFIGURATION / POLICY HASH MISMATCH
+           ↓
+       SUSPICIOUS
+   
+   INCOMPLETE / MISSING REQUIRED EVIDENCE
+           ↓
+       SUSPICIOUS
+   
+   STATISTICAL ANOMALY / THRESHOLD EXCEEDANCE
+           ↓
+       SUSPICIOUS
+   
+   ALL REQUIRED EVIDENCE PRESENT & WITHIN POLICY + COMPATIBLE CONFIGURATION
+           ↓
+        ACCEPT
+   ```
+   Rule evaluation never depends on dictionary key iteration order or system timestamps.
+
+4. **ACCEPT Semantics (Deliberately Strict):**
+   A verification attempt is accepted IF AND ONLY IF:
+   - Required evidence (threshold report or statistical evidence) is present and non-empty.
+   - Configuration is compatible (`baseline_configuration_hash` matches).
+   - No evaluated threshold is exceeded (`exceeded_count == 0`).
+   - No explicit protocol/security violation exists (`explicit_violation is False`).
+   - The protocol evidence is complete (`is_evidence_complete is True`).
+   `ACCEPT` is never a default fallback for missing or indeterminate information.
+
+5. **SUSPICIOUS Semantics (Honest Uncertainty):**
+   `SUSPICIOUS` represents an anomalous or indeterminate state where acceptance is unwarranted, but an explicit attack cannot be proven:
+   - One or more statistical thresholds exceeded without confirmed explicit violation.
+   - Missing or incomplete evidence (e.g. absent metric evaluations, missing expected metrics).
+   - Configuration context mismatches.
+   - Indeterminate protocol evidence.
+
+6. **ATTACK Semantics (Explicit Deterministic Violation):**
+   `ATTACK` requires an explicit, confirmed violation flag provided by protocol verification layers (e.g., future M15 Forgery, M16 Replay, M17 Impersonation, M18 Unauthorized Verification, M19 Channel Attack modules via `ProtocolSecurityEvidence`).
+   M12 does not simulate or classify attack types; it consumes typed violation signals.
+
+7. **Strict Absence of Composite Security Scores:**
+   - Strictly NO composite scores (`security_score`, `trust_score`, `risk_score`, `weighted_score`, `quantum_score`).
+   - No weighted metric collapse or hidden scoring models.
+   - All evaluated metrics, exceeded metric names, and threshold margins are preserved individually in `DecisionResult.exceeded_metrics` and `DecisionResult.threshold_report`.
+
+8. **Missing/Invalid Evidence vs. Programming Errors:**
+   - Malformed data or wrong types raise `TypeError` or `ValueError` at runtime validation.
+   - Valid data structures indicating incomplete or indeterminate operational evidence deterministically evaluate to `SUSPICIOUS`, never `ACCEPT`.
+
+9. **Immutability and Determinism:**
+   - `DecisionResult`, `ProtocolSecurityEvidence`, and `DecisionReasonCode` are immutable (frozen dataclasses and StrEnum).
+   - Evaluator functions are pure and side-effect free: repeated evaluations of identical inputs yield identical outputs.
+
+---
+
+# 60. DEC-060 — Impersonation Detection Architecture, Identity/Authentication Evidence Model, Precedence, and Boundary Guarantees (Milestone M13)
+
+**Status:** ACCEPTED (Milestone M13)
+
+### Decision
+
+1. **Formal Definition of Impersonation:**
+   An impersonation attempt in Q-SHIELD is defined as an entity attempting to participate in or authenticate within the protocol while asserting an identity that it is not legitimately authorized or authenticated to represent:
+   $$\text{Claimed Identity} \ne \text{Expected Identity} \quad \lor \quad \text{Claimed Identity} \ne \text{Authenticated Identity}$$
+   Impersonation is fundamentally a protocol- and identity-layer security event, NOT a quantum physical measurement anomaly.
+
+2. **Absolute Boundary Guarantees & Scientific Distinctions:**
+   - **Quantum Anomaly $\ne$ Impersonation:** Physical decoherence, noise, and statistical threshold exceedance (e.g. low fidelity, high QBER) indicate operational or channel degradation, NEVER proof of impersonation.
+   - **Impersonation $\ne$ Replay:** Freshness, session reuse, and timestamp replays are strictly separated from identity assertion validation.
+   - **Impersonation $\ne$ Signature Forgery:** Cryptographic signature invalidity is evaluated at the signature layer, not conflated with identity claims.
+   - **Impersonation $\ne$ Unauthorized Verification:** A legitimate identity lacking verification permission belongs to authorization (M14), not identity assertion.
+   - **Impersonation $\ne$ Quantum Channel Attack:** Eavesdropping or physical tampering on the quantum channel belongs strictly to M15.
+
+3. **Identity and Authentication Evidence Model:**
+   - `IdentityClaim`: Frozen dataclass capturing `claimed_identity`, `expected_identity`, `role`, `session_id`, and `configuration_hash`. Rejects empty/whitespace strings and secret keywords.
+   - `AuthenticationEvidence`: Frozen dataclass capturing `authenticated_identity`, `is_authenticated`, `credential_type`, `auth_details`, `is_complete`, and `session_id`. Enforces zero secret leakage by rejecting raw password/private_key keys.
+   - `ImpersonationEvidence`: Frozen dataclass capturing categorical status (`IdentityEvidenceStatus`), canonical reason codes (`ImpersonationReasonCode`), and providing direct conversion to M12 `ProtocolSecurityEvidence`. Nested dictionaries are recursively frozen.
+
+4. **Identity Authority Hierarchy & Conflict Resolution:**
+   - `authenticated_identity` is authoritative for who the entity actually is.
+   - `expected_identity` is authoritative for who the protocol/session context expects.
+   - `claimed_identity` is the asserted claim that must agree with both.
+   - **Case 1 (`expected == claimed != authenticated`):** Claimant claims to be expected party but authenticated as someone else $\to$ `status = IDENTITY_MISMATCH`, primary reason `AUTHENTICATED_IDENTITY_MISMATCH` (Explicit Violation $\to$ ATTACK).
+   - **Case 2 (`expected == authenticated != claimed`):** Claimant claims to be Eve but credentials prove Alice for an Alice session $\to$ `status = CONFLICTING`, reason codes record both `AUTHENTICATED_IDENTITY_MISMATCH`, `CLAIMED_IDENTITY_MISMATCH`, and `CONFLICTING_IDENTITY_EVIDENCE` (Explicit Violation $\to$ ATTACK).
+   - **Case 3 (`expected != claimed != authenticated`):** All three disagree $\to$ `status = CONFLICTING`, recording multi-assertional conflict (Explicit Violation $\to$ ATTACK).
+   - **Missing Authenticated Identity in Valid Auth:** When `is_authenticated=True` but `authenticated_identity=None`, the mechanism verified a credential but failed to attribute who the entity is. This cannot verify a named claim $\to$ `status = INCOMPLETE`, reason `INCOMPLETE_AUTHENTICATION_EVIDENCE` (Indeterminate $\to$ M12 SUSPICIOUS).
+
+5. **Missing vs. Failed Authentication Semantics:**
+   - **Missing Authentication Evidence:** Absence of authentication evidence (`auth_evidence is None` or `is_complete is False`) represents operational incompleteness / uncertainty (`status = INCOMPLETE`, `is_indeterminate = True`). This routes to `is_complete = False` in M12, deterministically evaluating to `SUSPICIOUS`, NEVER `ATTACK`.
+   - **Failed Authentication:** Present authentication evidence that explicitly failed (`is_authenticated = False`) constitutes a confirmed protocol violation (`status = AUTHENTICATION_FAILED`, `is_impersonation_detected = True`), routing to `explicit_violation = True` in M12 and evaluating to `ATTACK`.
+
+6. **Explicit Violation Semantics:**
+   `is_impersonation_detected = True` is triggered IF AND ONLY IF:
+   - Authentication explicitly failed (`is_authenticated is False`), OR
+   - Claimed identity does not match authoritatively authenticated identity (`claimed != authenticated`), OR
+   - Claimed identity does not match expected identity (`claimed != expected`).
+
+7. **Zero Secret Leakage Enforcement:**
+   Raw passwords, private keys, API keys, or cryptographic secrets are strictly prohibited from entering evidence structures (`AuthenticationEvidence`, `IdentityClaim`, `ImpersonationEvidence`). Any attempt to include forbidden secret keywords raises an immediate `ValueError`.
+
+8. **M13 $\to$ M12 Integration Contract:**
+   M13 does not duplicate M12's verdict engine. Instead:
+   $$\text{M13 ImpersonationEvidence} \xrightarrow{\text{to\_protocol\_security\_evidence()}} \text{M12 ProtocolSecurityEvidence} \xrightarrow{\text{evaluate\_security\_decision()}} \text{DecisionResult}$$
+   - When impersonation is detected, M12 Precedence 1 triggers `ATTACK`.
+   - When authentication is missing or incomplete, M12 Precedence 3 triggers `SUSPICIOUS`.
+   - When identity is valid, M12 Precedence 5 allows `ACCEPT` (if quantum metrics are within policy).
+
+9. **Prohibition of Composite Scoring:**
+   Strictly zero scalar composite scores (`impersonation_score`, `identity_score`, `trust_score`, `risk_score`, or weighted combinations). All evidence fields remain individually inspectable and explainable.
+
+10. **Research Prototype Limitations & Assumptions:**
+   - Q-SHIELD does not implement production IAM infrastructure (OAuth, JWT, X.509, TLS certificates, blockchain identity).
+   - In this research prototype, explicit deterministic typed containers represent identity assertions and credential validations.
+
+---
+
+# 61. DEC-061 — Deterministic Unauthorized Verification Detection Architecture, Verification Policy Model, Boundary Guarantees, and M12 Integration (Milestone M14)
+
+**Status:** ACCEPTED (Milestone M14)
+
+### Decision
+
+1. **Purpose and Formal Definition of Unauthorized Verification:**
+   Milestone M14 establishes the deterministic unauthorized verification detection layer for Q-SHIELD.
+   Unauthorized verification is defined as an otherwise authenticated participant attempting to perform a verification operation that they are not authorized or permitted to perform within the defined protocol and security context:
+   $$\text{Participant Is Authenticated} \land \neg \text{Authorized}(\text{Participant}, \text{Operation}, \text{Resource}, \text{Context})$$
+   M14 answers: *"Is this authenticated participant authorized to perform this verification operation in this security context?"*
+
+2. **Authentication vs. Authorization Boundary (M13 vs. M14):**
+   - **Authentication (M13)** answers: *"Who are you?"* (Identity assertion validation and credential verification).
+   - **Authorization (M14)** answers: *"What are you permitted to do?"* (Policy evaluation on whether an entity is permitted to perform a specific verification operation).
+   - $\text{authenticated} = \text{True}$ does NOT imply $\text{authorized} = \text{True}$.
+   - $\text{authorized} = \text{False}$ does NOT imply $\text{impersonation} = \text{True}$.
+   - Example: Alice is genuinely authenticated as Alice. Alice requests verification. If Alice lacks verification permission under the active policy, M14 flags an explicit unauthorized verification violation (`status = UNAUTHORIZED`, `violation_type = UNAUTHORIZED_VERIFICATION` $\to$ M12 `ATTACK`). This is an authorization violation, NOT an impersonation violation.
+
+3. **Quantum Anomaly Independence (Strict Scientific Rule):**
+   - M14 must NEVER infer authorization from quantum measurement anomalies (QBER, fidelity, Bell correlation, threshold crossings).
+   - Quantum metrics describe channel physics and hardware noise, not security permissions.
+   - Therefore:
+     $$\text{Authorized Verifier} + \text{High Quantum Noise / Anomaly} \implies \text{M14 AUTHORIZED}, \text{M12 SUSPICIOUS (via M11)}$$
+     $$\text{Unauthorized Verifier} + \text{Clean Quantum Statistics} \implies \text{M14 UNAUTHORIZED}, \text{M12 ATTACK}$$
+   - Clean quantum metrics can never override an explicit authorization violation.
+
+4. **Deterministic Authorization Policy Model:**
+   - `VerificationOperation`: Categorical enum of supported verification operations (`VERIFY`, `VERIFY_TELEPORTATION`, `AUDIT_VERIFICATION`). Unrelated operations (e.g. `SIGN`, `REGISTER`, `DELETE`, `LOGIN`, `TRANSMIT`) are rejected as unsupported verification scope (`INCOMPATIBLE_CONTEXT` / `UNSUPPORTED_OPERATION`), NEVER misclassified as unauthorized verification attacks.
+   - `VerificationPolicy`: Immutable container holding `policy_id`, `allowed_identities`, `allowed_roles`, `allowed_operations`, `allowed_resources`, `denied_identities`, `denied_roles`, `denied_operations`, `denied_resources`, `session_id`, `configuration_hash`, and metadata.
+   - `AuthorizationRequest`: Immutable container holding `participant_identity`, `operation`, `role`, `resource_id`, `session_id`, `configuration_hash`, and metadata.
+   - `AuthorizationEvidence`: Immutable container holding evaluation outcome (`is_authorized`, `is_unauthorized_detected`, `is_indeterminate`, `status`, `primary_reason`, `reason_codes`, and metadata).
+
+5. **Policy Evaluation Precedence and Explicit Denial Semantics:**
+   Evaluation proceeds through strict, deterministic precedence:
+   1. Scope check: Operation must be a recognized verification operation.
+   2. Context check: Configuration hash and session ID compatibility.
+   3. Authentication prerequisite check: Failed or missing authentication routes to `INCOMPLETE` (owned by M13).
+   4. Policy availability check: Missing or empty policy routes to `INCOMPLETE`.
+   5. Conflicting directives check: Mutual inclusion in allowed and denied sets (identities, roles, operations, or resources) routes to `CONFLICTING`.
+   6. Explicit denials: Denied identity, denied role, denied operation, or denied resource triggers `UNAUTHORIZED` (`explicit_violation = True` $\to$ M12 `ATTACK`).
+   7. Restriction checks: Operation not in allowed operations or resource not in allowed resources triggers `UNAUTHORIZED` (`explicit_violation = True` $\to$ M12 `ATTACK`).
+   8. Whitelist checks: Role not in allowed roles or identity not in allowed identities triggers `UNAUTHORIZED` (`explicit_violation = True` $\to$ M12 `ATTACK`).
+   9. Granted: All policy checks satisfied triggers `AUTHORIZED` (`explicit_violation = False`, `is_complete = True` $\to$ M12 `ACCEPT` if quantum metrics clean).
+
+6. **Missing Evidence vs. Explicit Violation Semantics:**
+   - **Missing Policy / Incomplete Evidence:** If `policy is None` or policy contains no rules, `status = INCOMPLETE`, `is_unauthorized_detected = False`, `is_indeterminate = True`. M12 evaluates this to `SUSPICIOUS`, NEVER `ATTACK`. Uncertainty is never converted into an attack.
+   - **Explicit Denial:** Confirmed policy denial (explicit deny or whitelist exclusion) produces `status = UNAUTHORIZED`, `is_unauthorized_detected = True`, yielding `explicit_violation = True` and M12 `ATTACK`.
+
+7. **Conflicting Evidence Semantics:**
+   Contradictory directives (identity, role, operation, or resource simultaneously present in both allowed and denied sets, or role allowed while identity denied) deterministically produce `status = CONFLICTING`, `primary_reason = CONFLICTING_AUTHORIZATION_EVIDENCE`, and `is_indeterminate = True`, evaluating to `SUSPICIOUS` in M12. Neither "deny wins" nor "allow wins" is applied; genuine conflicts remain explicitly visible as conflicts.
+
+8. **Context and Session Binding Semantics:**
+   Mismatched `session_id` or `configuration_hash` produces `status = INCOMPATIBLE_CONTEXT` (`is_indeterminate = True`), routing to `SUSPICIOUS` in M12 and NEVER an accidental `ACCEPT`.
+
+9. **M12 Decision Engine Integration:**
+   M14 integrates into M12 via `AuthorizationEvidence.to_protocol_security_evidence()` and `evaluate_authorization_decision()`:
+   $$\text{AuthorizationEvidence} \to \text{ProtocolSecurityEvidence} \to \text{M12 evaluate\_security\_decision}() \to \text{DecisionResult}$$
+   M14 does not replace M12; M12 remains the sole final decision authority.
+
+10. **Strict Scope & Engineering Boundaries:**
+    - **No Impersonation Detection (M13):** M14 consumes authenticated identity evidence; it does not validate credentials or detect identity spoofing.
+    - **No Replay Detection:** M14 has no nonce reuse tracking, freshness windows, or timestamp caching.
+    - **No Quantum Channel Attack Detection (M15):** M14 has no photon-level monitoring, intercept-resend, or eavesdropping detectors.
+    - **No Composite Scoring:** Strictly zero scalar trust scores, risk scores, or security scores.
+    - **No AI / Machine Learning:** Rule-based deterministic evaluation only.
+    - **No Enterprise IAM:** M14 is a research-grade, memory-resident authorization evaluator for the Q-SHIELD prototype; it does not implement OAuth, JWT, X.509, LDAP, Active Directory, or cloud IAM.
+    - **Defensive Secret Leakage Guard:** Rejects known secret-bearing field names (`password`, `secret`, `private_key`, etc.) in metadata; does not claim mathematically complete secret discovery.
+    - **Proportional Scientific Claims:** M14 is scientifically and architecturally reviewed, deterministically tested, and regression validated; it makes no claims of 100% universal security or mathematically complete verification.
+
+---
+
+# 62. DEC-062 — Deterministic Quantum Channel Attack Detection Layer Architecture, Lower-Layer Statistical Evidence Reuse, Anomaly vs Attack Distinctions, Categorical Channel States, and Decision Engine Bridge
+
+**Status:** ACCEPTED (Milestone M15)
+
+### Decision
+
+1. **Purpose and Scientific Boundaries of M15:**
+   Milestone M15 establishes the deterministic quantum channel attack and anomaly detection layer for Q-SHIELD. It deterministically evaluates whether observed quantum communication telemetry (QBER, teleportation fidelity, Bell correlations, Born measurement distributions / TVD, and Pauli expectation values) is inconsistent with the calibrated honest quantum channel baseline.
+   $$\text{M10 Statistical Evidence} + \text{M11 Threshold Report} \implies \text{M15 Channel Detection} \implies \text{ChannelSecurityEvidence}$$
+   - M15 answers: *"Does the observed quantum communication behavior provide evidence of a channel-level security anomaly or disturbance?"*
+   - M15 does **NOT** answer: *"Who attacked?"* (Strictly owned by M13 Impersonation Detection).
+   - M15 does **NOT** answer: *"Was this participant authorized?"* (Strictly owned by M14 Unauthorized Verification Detection).
+   - M15 does **NOT** produce the final security decision (`ACCEPT`, `SUSPICIOUS`, `ATTACK`). M12 remains the sole final decision authority.
+
+2. **Zero Duplicate Calculations & Lower-Layer Consumption:**
+   M15 strictly consumes lower-layer evidence from M10 (`StatisticalEvidence`) and M11 (`PolicyEvaluationReport`, `MetricThresholdEvaluation`). M15 does **NOT** independently recalculate sample means, variances, standard errors, z-scores, Total Variation Distance (TVD), Kolmogorov-Smirnov (KS) statistics, Welch's t-tests, or empirical quantiles. Threshold boundaries and directionalities are owned by M11 and never overridden by hardcoded heuristics in M15.
+
+3. **Important Semantic Distinction — Statistical Anomaly $\ne$ Proven Attacker:**
+   A threshold exceedance (e.g. $\text{QBER} > \text{threshold}$) represents a statistically significant channel anomaly beyond the calibrated honest operating bounds. It does **NOT** constitute proof of a specific named adversary (e.g. Eve performing intercept-resend). Possible physical causes include uncalibrated environmental fluctuations, device thermal drift, fiber perturbation, hardware misalignment, or active interference. M15 uses categorical, explainable language (`CHANNEL_ANOMALY`, `CHANNEL_SECURITY_VIOLATION`, `ATTACK_CONSISTENT_CHANNEL_BEHAVIOR`) rather than speculative claims of confirmed attacker identity.
+
+4. **Categorical Evidence States (`ChannelEvidenceStatus`):**
+   M15 defines deterministic, mutually exclusive categorical states:
+   - `CLEAN`: Required telemetry and threshold evaluations present, operating context matches, no threshold exceeded.
+   - `ANOMALOUS`: Required telemetry present, operating context matches, one or more calibrated thresholds exceeded.
+   - `SECURITY_VIOLATION`: Explicit channel-security violation confirmed under defined protocol criteria.
+   - `INCOMPLETE`: Required telemetry or threshold report is missing or contains insufficient data.
+   - `INCOMPATIBLE_CONTEXT`: Session identifier or baseline configuration hash does not match expected operating context.
+   - `CONFLICTING`: Channel evidence contains contradictory lower-layer assertions (e.g. incompatible policy/report hashes).
+
+5. **Canonical Machine-Readable Reason Codes (`ChannelReasonCode`):**
+   Decisions are explained using typed, canonical reason codes:
+   - `CHANNEL_CLEAN`: All evaluated metrics within calibrated threshold boundaries.
+   - `QBER_THRESHOLD_EXCEEDED`: Quantum bit error rate crossed upper calibrated threshold.
+   - `BELL_CORRELATION_ANOMALY`: Bell-state correlation crossed calibrated boundary.
+   - `TELEPORTATION_FIDELITY_ANOMALY`: Teleportation fidelity dropped below lower threshold.
+   - `DISTRIBUTION_TVD_THRESHOLD_EXCEEDED`: Born probability total variation distance crossed upper threshold.
+   - `PAULI_EXPECTATION_ANOMALY`: Pauli expectation absolute deviation crossed upper threshold.
+   - `CHANNEL_STATISTICAL_ANOMALY`: General metric deviation crossed calibrated threshold.
+   - `MULTI_METRIC_CHANNEL_DISTURBANCE`: Multiple independent physical signal categories anomalous simultaneously.
+   - `QUANTUM_CHANNEL_SECURITY_VIOLATION`: Confirmed explicit channel security violation.
+   - `MISSING_CHANNEL_EVIDENCE`: Telemetry or threshold report missing entirely.
+   - `INCOMPLETE_CHANNEL_EVIDENCE`: Required metrics absent from evaluation report.
+   - `CHANNEL_SESSION_MISMATCH`: Session identifier mismatch against expected context.
+   - `CHANNEL_CONFIGURATION_MISMATCH`: Configuration hash mismatch against expected context.
+   - `CHANNEL_CONTEXT_MISMATCH`: General provenance or context incompatibility.
+   - `CONFLICTING_CHANNEL_EVIDENCE`: Contradictory reports or configuration assertions.
+   - `UNSUPPORTED_CHANNEL_EVIDENCE`: Unrecognized or malformed evidence structure.
+
+6. **Multi-Signal Evidence & No "First Error Wins":**
+   M15 never aborts processing upon encountering the first threshold exceedance. When multiple independent metrics cross thresholds (e.g. QBER elevated AND Bell correlation degraded AND teleportation fidelity degraded), M15 preserves **ALL** applicable reason codes and records `MULTI_METRIC_CHANNEL_DISTURBANCE`. Primary reason selection follows strict deterministic precedence.
+
+7. **Context and Configuration Binding:**
+   M15 enforces exact SHA-256 baseline configuration hash and session identifier matching. Incompatible operating conditions route to `INCOMPATIBLE_CONTEXT` and evaluate to `SUSPICIOUS` in M12, preventing false acceptance while never misclassifying configuration mismatches as attacks.
+
+8. **Missing Evidence vs. Explicit Violation Semantics:**
+   - **Missing Evidence:** If telemetry or threshold reports are missing, `status = INCOMPLETE`, `is_evidence_complete = False`. M12 evaluates this to `SUSPICIOUS`, NEVER `ATTACK`.
+   - **Explicit Violation:** If an explicit channel security breach is verified, `status = SECURITY_VIOLATION`, `is_explicit_violation = True`, `violation_type = "QUANTUM_CHANNEL_SECURITY_VIOLATION"`, yielding M12 `ATTACK`.
+
+9. **Noise Model Operational Boundary:**
+   Calibrated honest noise (M8/M9) produces physical metrics within M11 threshold policies. M15 evaluates compliant noise as `CLEAN` (M12 `ACCEPT`), ensuring legitimate physical noise is never classified as an attack.
+
+10. **M12 Decision Engine Integration:**
+    M15 bridges to M12 via `ChannelSecurityEvidence.to_protocol_security_evidence()` and `evaluate_channel_attack_decision()`:
+    $$\text{ChannelSecurityEvidence} \to \text{ProtocolSecurityEvidence} \to \text{M12 evaluate\_security\_decision}() \to \text{DecisionResult}$$
+    M15 does not usurp M12; M12 remains the sole final decision authority.
+
+11. **Strict Scope & Engineering Boundaries:**
+    - **No Impersonation Detection (M13):** Channel anomalies do not imply or modify identity claims.
+    - **No Unauthorized Verification Detection (M14):** Channel anomalies do not imply or modify authorization status.
+    - **No Replay Detection:** M15 contains no nonce tracking, timestamp caches, or replay windows.
+    - **No Composite Scoring:** Strictly zero scalar trust scores, risk scores, or composite scalar collapsing.
+    - **No AI / Machine Learning:** Rule-based deterministic evaluation only.
+    - **Strict Immutability & Secret Leakage Guards:** Frozen dataclasses, recursive deep copying, and rejection of credentials/secrets in metadata.
+
+---
+
+# 63. DEC-063 — Deterministic Evidence Fusion Layer Architecture, Multi-Source Synthesis (M13/M14/M15), Absolute Scope Boundaries, Categorical Fused States, Missing Evidence and Conflict Semantics, and Sole M12 Final Decision Authority
+
+**Status:** ACCEPTED (Milestone M16)
+
+### Decision
+
+1. **Purpose and Scope Boundary of M16:**
+   Milestone M16 establishes the deterministic evidence fusion layer for Q-SHIELD. It aggregates, synthesizes, and audits independent security evidence across identity (M13 Impersonation), authorization (M14 Unauthorized Verification), and quantum channel physics (M15 Quantum Channel Attacks) into an immutable, deterministic, auditable container (`FusedSecurityEvidence`).
+   $$\text{M13 Evidence} + \text{M14 Evidence} + \text{M15 Evidence} \implies \text{M16 Evidence Fusion} \implies \text{FusedSecurityEvidence} \to \text{M12 Engine} \implies \text{DecisionResult}$$
+   - M16 answers: *"What security evidence is present across identity, authorization, and quantum-channel dimensions, and are those evidence assertions mutually compatible and complete?"*
+   - M16 does **NOT** answer: *"Is the system secure?"*, *"What is the risk score?"*, or *"Who attacked?"*
+   - **M16 is strictly an evidence aggregation and synthesis layer, NOT a second final decision engine.** M12 remains the **sole authorized decision authority** (`ACCEPT / SUSPICIOUS / ATTACK`).
+
+2. **Zero Composite Scoring, Zero Machine Learning & Zero Weighted Voting:**
+   M16 strictly prohibits:
+   - Scalar risk scores, trust scores, threat scores, confidence scores, attack probabilities, or severity ratings (e.g. no 0–100 scale).
+   - Numerical combinations, weighted voting, majority voting, Bayesian attack probabilities, or heuristic points.
+   - Machine learning, neural networks, or classifiers.
+   Evidence fusion remains entirely categorical, rule-based, and auditable.
+
+3. **Source Evidence Provenance and Identity Preservation:**
+   The fused container retains the distinct identity and semantics of each contributing subsystem:
+   - `IMPERSONATION` (M13): Identity authentication, credential matching, and impersonation detection.
+   - `AUTHORIZATION` (M14): Verification operation permissions, role/resource policy evaluation.
+   - `QUANTUM_CHANNEL` (M15): Channel telemetry, physical disturbance, and calibrated threshold evaluations.
+   All individual reason codes and subsystem statuses are preserved without flattening, loss of attribution, or semantic reinterpretation.
+
+4. **Preservation of Semantic Distinctions (Anomaly vs Explicit Violation):**
+   M16 strictly preserves the boundary between:
+   - **Statistical / Physical Anomalies:** (e.g. M15 QBER or fidelity threshold exceedances) $\to$ preserved as `ANOMALOUS` (evaluating to M12 `SUSPICIOUS`). Anomalies are never upgraded into confirmed attacks.
+   - **Explicit Security Violations:** (e.g. M13 impersonation mismatch, M14 unauthorized verification denial, M15 explicit channel breach) $\to$ preserved as `SECURITY_VIOLATION` (evaluating to M12 `ATTACK`). Explicit violations are never downgraded into generic anomalies.
+
+5. **Multi-Signal & Multiple Explicit Violation Accumulation:**
+   When multiple subsystems independently confirm explicit security violations (e.g. M13 impersonation detected AND M14 unauthorized verification attempt AND M15 channel security breach), M16 preserves **ALL** confirmed violation identifiers deterministically without "first violation wins" or overwrite.
+
+6. **Missing Evidence Semantics ($\text{Missing} \ne \text{Clean}$):**
+   Missing or omitted required evidence sources (e.g. unprovided M14 authorization report) deterministically evaluate to `status = INCOMPLETE` and `is_complete = False`, routing to M12 `SUSPICIOUS`. Missing evidence is never converted into clean evidence or confirmed attack.
+
+7. **Context & Configuration Compatibility:**
+   M16 audits operational context across all contributing evidence records:
+   - `session_id` must match across all sources and against expected context constraints.
+   - `configuration_hash` (canonical SHA-256) must match across all sources and against expected baseline.
+   - Discrepancies produce `INCOMPATIBLE_CONTEXT` or `CONFLICTING`, routing to M12 `SUSPICIOUS` and preventing cross-session or mismatched configuration fusion.
+
+8. **Conflict Handling & Explicit Violation Preservation:**
+   If contributing sources report contradictory evidence assertions (e.g. M13 reports internal credential conflict, or sources assert contradictory session contexts):
+   - M16 marks `status = CONFLICTING` and `is_complete = False`.
+   - **Crucial Invariant:** If any source independently confirms an explicit security violation (e.g. M13 impersonation mismatch, M14 unauthorized verification attempt, M15 quantum channel breach), that explicit violation is **preserved** (`is_explicit_violation = True`, `violations = (...)`, reason code `EXPLICIT_SECURITY_VIOLATION_PRESENT`). Conflicting peripheral or contextual evidence does not suppress or erase confirmed explicit violations.
+   - If no explicit violation is present, a conflict evaluates to M12 `SUSPICIOUS` (`explicit_violation = False`).
+   - M16 never applies arbitrary heuristics ("allow wins", "deny wins") or numerical voting to conceal contradictions.
+
+9. **Deterministic Fused Status Precedence Hierarchy:**
+   Fused status is determined via strict deterministic precedence:
+   1. *Conflicting Evidence Assertions* $\to$ `CONFLICTING` (Preserves explicit violations if present $\to$ M12 `ATTACK`; otherwise M12 `SUSPICIOUS`)
+   2. *Confirmed Explicit Security Violation* $\to$ `SECURITY_VIOLATION` (M12 `ATTACK`)
+   3. *Context / Configuration Hash Incompatibility* $\to$ `INCOMPATIBLE_CONTEXT` (Preserves explicit violations if present $\to$ M12 `ATTACK`; otherwise M12 `SUSPICIOUS`)
+   4. *Missing Required Source / Incomplete Evidence* $\to$ `INCOMPLETE` (Preserves explicit violations if present $\to$ M12 `ATTACK`; otherwise M12 `SUSPICIOUS`)
+   5. *Physical / Statistical Channel Anomaly* $\to$ `ANOMALOUS` (M12 `SUSPICIOUS`)
+   6. *All Required Sources Present & Clean* $\to$ `CLEAN` (M12 `ACCEPT`)
+
+10. **M12 Decision Engine Integration:**
+    M16 integrates seamlessly into M12 via `FusedSecurityEvidence.to_protocol_security_evidence()` and `evaluate_fused_security_decision()`:
+    $$\text{FusedSecurityEvidence} \to \text{ProtocolSecurityEvidence} \to \text{M12 evaluate\_security\_decision}() \to \text{DecisionResult}$$
+    In `ProtocolSecurityEvidence`, M16 maps `explicit_violation = self.is_explicit_violation`, `violation_type = "+".join(self.violations)`, and `is_complete = self.is_complete`.
+    Under established M12 Precedence 1 ("Confirmed Explicit Violation $\to$ ATTACK"), M12 evaluates confirmed explicit violations with highest authority, yielding `DecisionVerdict.ATTACK`.
+    M16 does not bypass or replace M12; M12 remains the sole final decision authority.
+
+11. **Deep Immutability & Defensive Secret Leakage Guard:**
+    `FusedSecurityEvidence` is a frozen dataclass with defensive copies of all sequences and deep-freezing of metadata dictionaries. Any dictionary key containing prohibited secret substrings (`password`, `secret`, `private_key`, `raw_key`, `token_secret`, `credential_raw`, `key_material`, `shared_secret`, `api_key`) is immediately rejected with `ValueError`.
+
+12. **Timestamp Provenance & Bit-for-Bit Determinism:**
+    `FusedSecurityEvidence.timestamp` represents deterministic observation provenance.
+    - When an explicit timestamp is supplied by the caller, it is preserved.
+    - When omitted, it is derived deterministically from the latest timestamp present in contributing source evidence (or empty string if none provided).
+    - Fusion performs no runtime clock evaluations (`datetime.now()`), guaranteeing that repeated fusions with identical inputs, context, and source evidence produce bit-for-bit identical outputs.
+
+---
+
+# 64. DEC-064 — Deterministic Security Evaluation Layer Architecture, Scenario-Driven Pipeline Auditing, Controlled Evaluation Boundary, and Prohibition of Unjustified Security Claims
+
+**Status:** ACCEPTED (Milestone M17)
+
+### Decision
+
+1. **Purpose and Scope Boundary of M17:**
+   Milestone M17 establishes the deterministic security evaluation layer for Q-SHIELD.
+   $$\text{EvaluationScenario} \to \text{M17 Evaluator} \to \text{M12 Decision Authority} \to \text{EvaluationResult} \to \text{EvaluationSummary}$$
+   - M17 answers: *"How does the implemented Q-SHIELD security pipeline behave when evaluated against controlled, known security scenarios?"*
+   - M17 does **NOT** detect attacks.
+   - M17 does **NOT** replace or bypass M12.
+   - M17 evaluates how the system behaves under defined, reproducible security scenarios and produces auditable, deterministic evaluation records.
+
+2. **Absolute Decision Authority (M12 Sole Authority):**
+   M17 is strictly an evaluation harness and contains zero attack decision logic. M17 does not independently calculate:
+   $$\text{if violation } \to \text{ATTACK, else if anomaly } \to \text{SUSPICIOUS}$$
+   Instead, M17 submits the scenario evidence fixture to M12 (`evaluate_security_decision`), observes M12's verdict and reason codes, and compares the observed decision with the scenario's expected outcome. M12 remains the sole final decision authority.
+
+3. **Controlled Evaluation Scenarios (Fixtures vs Real-World Claims):**
+   M17 defines ten canonical evaluation categories representing controlled evaluation fixtures:
+   - `CLEAN_HONEST`: Legitimate signature and quantum transmission under ideal operating conditions.
+   - `BENIGN_NOISE`: Legitimate transmission experiencing calibrated channel noise within operating tolerance.
+   - `IMPERSONATION`: Identity mismatch / spoofed signature detection (M13).
+   - `UNAUTHORIZED_VERIFICATION`: Verification attempt by unpermitted participant / role (M14).
+   - `QUANTUM_CHANNEL_ANOMALY`: Calibrated threshold exceedance on quantum channel telemetry (M15).
+   - `EXPLICIT_QUANTUM_CHANNEL_VIOLATION`: Confirmed explicit physical channel security breach (M15).
+   - `INCOMPLETE_EVIDENCE`: Missing telemetry, absent policies, or incomplete evidence fixtures.
+   - `INCOMPATIBLE_CONTEXT`: Mismatched session identifiers or baseline configuration hashes.
+   - `CONFLICTING_EVIDENCE`: Contradictory evidence assertions across or within subsystems.
+   - `MULTI_SOURCE_SECURITY_VIOLATION`: Combinations of independent explicit violations across M13, M14, and M15.
+   These scenarios are controlled test fixtures; they do not represent real-world attack detection probability.
+
+4. **Expected vs Observed Evaluation Semantics:**
+   M17 evaluates scenarios categorically:
+   - `PASS`: The system produced the exact expected verdict (`ACCEPT`, `SUSPICIOUS`, or `ATTACK`) for this defined evaluation scenario.
+   - `FAIL`: The observed system verdict did not match the expected verdict for the scenario.
+   M17 PASS does **NOT** mean "the system is cryptographically secure." M17 FAIL does **NOT** mean "the detector is broken in the real world."
+
+5. **Deterministic Categorical & Count-Based Metrics:**
+   M17 reports deterministic counts and dataset-bound metrics:
+   - Total scenarios, passed scenarios, failed scenarios, and pass rate.
+   - Categorical verdict distribution: counts of `ACCEPT`, `SUSPICIOUS`, and `ATTACK`.
+   - Confusion matrix counts on the evaluation dataset:
+     - True Positive (TP): Expected security violation (`ATTACK`) and observed `ATTACK`.
+     - False Negative (FN): Expected security violation (`ATTACK`) but observed non-`ATTACK`.
+     - False Positive (FP): Expected non-violation scenario and observed `ATTACK`.
+     - True Negative (TN): Expected non-violation scenario and observed non-`ATTACK`.
+     - Sensitivity and Specificity strictly on the defined evaluation dataset.
+   M17 strictly prohibits scalar trust scores, risk scores, weighted combination scores, or speculative real-world attack probability percentages.
+
+6. **Strict Prohibition of Unjustified Security Claims:**
+   The implementation, documentation, and reports strictly forbid claiming:
+   - 100% security or zero-day protection.
+   - Guaranteed quantum attack detection or universal threat mitigation.
+   - Information-theoretic detector guarantees (distinguished from protocol assumptions per DEC-023).
+   - Real-world attack detection probability.
+   - Attacker identification (distinguished from channel anomaly per DEC-062).
+   Approved scientific phrasing: *"observed on the defined evaluation scenarios under the tested assumptions within the calibrated simulation"*.
+
+7. **Multi-Source Evaluation Combinations:**
+   M17 systematically evaluates multi-source interaction combinations (A through J):
+   - M13 violation only
+   - M14 violation only
+   - M15 violation only
+   - M13 + M14 violations
+   - M13 + M15 violations
+   - M14 + M15 violations
+   - M13 + M14 + M15 violations
+   - Explicit violation + conflict
+   - Anomaly + incomplete evidence
+   - Clean + expected noise
+   All combinations observe existing M16/M12 fusion precedence without creating ad-hoc precedence rules.
+
+8. **Deterministic Suite Execution & Continuation on Failure:**
+   The evaluation runner (`run_security_evaluation`):
+   - Executes all scenarios to completion without early abort upon failure.
+   - Preserves deterministic scenario ordering.
+   - Never mutates input scenarios or evidence fixtures.
+   - Employs zero runtime timestamps (`datetime.now()`), ensuring bit-for-bit reproducible results across repeated runs.
+
+9. **Deep Immutability & Defensive Secret Leakage Guard:**
+   `EvaluationScenario`, `EvaluationResult`, `ConfusionMatrixMetrics`, `CategorySummary`, and `EvaluationSummary` are frozen dataclasses with defensively frozen tuples and mapping proxies. Scenario metadata is recursively scanned to reject sensitive secret-bearing keys (`password`, `secret`, `private_key`, `key_material`, etc.).
+
+10. **Scope Discipline:**
+    M17 contains zero dependencies on future modules (M18 benchmarking, M19 dashboard, M20 blockchain). M17 operates entirely on the frozen M1–M16 architecture.
+
+---
+
+# 65. DEC-065 — Deterministic Performance Benchmarking Architecture, Monotonic High-Resolution Timing, Warmup Isolation, Zero-Denominator Semantics, Observational Metrics vs Scoring Prohibition, and Scientific Claim Discipline
+
+**Status:** ACCEPTED (Milestone M18)
+
+### Decision
+
+1. **Purpose and Scope Boundary of M18:**
+   Milestone M18 establishes the deterministic performance and operational benchmarking layer for Q-SHIELD.
+   $$\text{Controlled Benchmark Workload} \to \text{Pipeline Execution} \to \text{Monotonic Timing Measurement} \to \text{BenchmarkResult} \to \text{BenchmarkSuiteResult}$$
+   - M18 answers: *"How long does a Q-SHIELD evaluation take under controlled workloads, how does execution scale as volume increases, what is the throughput, and are benchmark specifications reproducible?"*
+   - M18 does **NOT** detect attacks.
+   - M18 does **NOT** decide security outcomes (M12 remains sole authority).
+   - M18 does **NOT** evaluate security correctness (M17 role).
+   - M18 does **NOT** optimize or adapt thresholds or detection logic.
+   - M18 is **strictly a performance and operational measurement layer**.
+
+2. **Absolute Architectural Hierarchy:**
+   The architectural authority chain is invariant:
+   $$\text{M12 (Sole Final Security Decision)} \longrightarrow \text{M17 (Security Evaluation)} \longrightarrow \text{M18 (Operational Benchmarking)}$$
+   Neither M17 nor M18 may replace, reinterpret, or bypass M12 verdicts (`ACCEPT / SUSPICIOUS / ATTACK`).
+
+3. **High-Resolution Monotonic Timing Methodology:**
+   Elapsed execution durations are measured using the platform's high-resolution monotonic timer:
+   - `time.perf_counter()` is used exclusively for measuring elapsed execution latency per iteration.
+   - `time.process_time()` is captured to record process CPU time.
+   - Wall-clock timestamps (`datetime.now()`, `time.time()`) are **strictly forbidden** for elapsed duration calculations.
+
+4. **Warmup Phase Isolation:**
+   To mitigate cold-cache, import, and JIT/interpreter startup transients:
+   - Configured warmup iterations execute before measured iterations.
+   - All warmup execution timings are **strictly excluded** from measured sample collections (`raw_latencies`), aggregate metrics (`min`, `max`, `mean`, `median`, `p95`), and throughput calculations.
+
+5. **Determinism vs. Empirical Timing Reality:**
+   M18 rigorously distinguishes:
+   - **Deterministic Specifications & Formulas:** Benchmark definitions, input scenario fixtures, configuration hashes, session bindings, and statistical calculation algorithms are 100% deterministic and bit-for-bit reproducible.
+   - **Empirical Timing Reality:** Elapsed execution time is an empirical physical measurement subject to CPU frequency, OS scheduling, background processes, memory bus contention, and hardware architecture. M18 **never** claims that physical timing values are mathematically deterministic or guaranteed across different hardware environments.
+
+6. **Zero-Denominator & Empty Data Semantics:**
+   Consistent with M17's scientific rigor, metrics are never fabricated:
+   - If configured iterations or successful iterations are 0:
+     $$\text{mean} = \text{None}, \quad \text{min} = \text{None}, \quad \text{max} = \text{None}, \quad \text{median} = \text{None}, \quad \text{p95} = \text{None}, \quad \text{throughput} = \text{None}$$
+   - Metrics are never defaulted to `0.0`, `1.0`, or arbitrary placeholders when the mathematical denominator is zero.
+
+7. **Strict Prohibition of Security & Risk Scoring:**
+   M18 strictly prohibits:
+   - `security_score`, `risk_score`, `trust_score`, `threat_score`, `confidence_score`, `attack_probability`, or composite heuristic points.
+   - Using low latency to imply higher security. Performance $\ne$ security.
+   - M12 verdict distributions (counts of `ACCEPT`, `SUSPICIOUS`, `ATTACK`) are recorded purely as observational measurements of what the pipeline produced during the benchmark workload.
+
+8. **Categorical Benchmark Coverage (Categories A through F):**
+   M18 standardizes six operational categories:
+   - `BASELINE_EVALUATION`: Operational latency of clean honest scenario evaluations.
+   - `SUSPICIOUS_EVALUATION`: Latency of channel anomaly evaluations.
+   - `ATTACK_EVALUATION`: Latency of confirmed explicit security violation evaluations.
+   - `EVIDENCE_FUSION`: Multi-source M16 evidence fusion throughput and latency.
+   - `SCENARIO_SCALING`: Multi-scenario workload batch scaling ($N = 1, 10, 50, 100$).
+   - `END_TO_END_PIPELINE`: Complete 16-scenario baseline evaluation suite execution.
+
+9. **Deep Immutability, Stable Identifier Retrieval & Secret Guard:**
+   - `BenchmarkScenario`, `BenchmarkResult`, and `BenchmarkSuiteResult` are frozen dataclasses with defensive sequence copies and recursively frozen metadata.
+   - Suite results allow direct, stable retrieval by benchmark identifier (`results_by_id`, `get_result(benchmark_id)`), avoiding fragile list-index assumptions.
+   - Metadata is recursively inspected to reject sensitive secret keywords (`password`, `secret`, `private_key`, `key_material`, etc.).
+
+10. **Scientific Claim Boundary:**
+    M18 benchmark reports may legitimately state:
+    > *"Under the documented benchmark environment and workload parameters, Q-SHIELD exhibited the measured latency, throughput, and scaling characteristics."*
+    They must **never** claim:
+    - *"The benchmark proves 100% security or complete attack immunity."*
+    - *"Low latency proves cryptographic robustness."*
+
+---
+
+# 66. Final Decision Principle
 
 Q-SHIELD follows:
 
@@ -1481,5 +2077,10 @@ The purpose of this file is simple:
 Every major assumption must be visible, reviewable, testable, and changeable.
 
 **Status:** ACTIVE
+
+
+
+
+
 
 
