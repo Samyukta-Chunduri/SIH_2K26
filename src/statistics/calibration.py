@@ -427,10 +427,18 @@ def calibrate_honest_baseline(
 
     # 2. Build state registry
     state_registry: dict[str, Any] = {}
+    custom_map = (
+        {c_name.strip().lower(): c_vec for c_name, c_vec in custom_states}
+        if custom_states
+        else {}
+    )
+
     for st_name in config.states:
         name_key = st_name.strip().lower()
         if name_key in STANDARD_STATE_NAMES:
             state_registry[name_key] = get_standard_state(name_key)
+        elif name_key in custom_map:
+            state_registry[name_key] = validate_state_vector(custom_map[name_key])
         else:
             raise ValueError(
                 f"State '{st_name}' is not in standard Pauli states {STANDARD_STATE_NAMES}. "
@@ -439,7 +447,9 @@ def calibrate_honest_baseline(
 
     if custom_states:
         for c_name, c_vec in custom_states:
-            state_registry[c_name] = validate_state_vector(c_vec)
+            c_key = c_name.strip().lower()
+            if c_key not in state_registry:
+                state_registry[c_key] = validate_state_vector(c_vec)
 
     # 3. Run repeated honest calibration trials and collect observations
     observations: list[CalibrationObservation] = []

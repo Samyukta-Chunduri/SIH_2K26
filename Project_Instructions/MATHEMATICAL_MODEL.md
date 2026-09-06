@@ -1063,6 +1063,106 @@ Therefore, an appropriate proportion interval method should be selected during i
 
 ---
 
+# 36A. Statistical Comparison and Deviation Metrics (Milestone M10)
+
+Before thresholds or decision rules are applied, newly observed quantum verification metrics are compared against an honest baseline to produce descriptive statistical evidence.
+
+### 1. Absolute Deviation
+
+For an observed scalar metric $x$ and baseline mean $\mu$:
+
+$$
+d = |x - \mu|
+$$
+
+Properties:
+* $d \ge 0$.
+* $d = 0$ if and only if $x = \mu$.
+
+### 2. Signed Deviation
+
+$$
+\delta = x - \mu
+$$
+
+* $\delta > 0$: observed value exceeds baseline expectation.
+* $\delta < 0$: observed value falls below baseline expectation.
+
+### 3. Safe Relative Deviation
+
+For metrics with non-zero baseline means:
+
+$$
+d_{\text{rel}} = \frac{|x - \mu|}{|\mu|}, \quad \text{for } |\mu| \ge \epsilon
+$$
+
+where $\epsilon = 10^{-12}$.
+
+When $|\mu| < \epsilon$ (such as zero error rate or zero Pauli expectation):
+
+$$
+d_{\text{rel}} = \text{undefined} \quad (\text{represented as None})
+$$
+
+This prevents division-by-zero artifacts, infinite values, or silent NaN propagation.
+
+### 4. Baseline Standard Error of the Mean
+
+The baseline mean $\mu$ is an empirical sample estimate with sampling uncertainty. For $N \ge 2$ calibration runs with sample standard deviation $s$:
+
+$$
+\text{SE} = \frac{s}{\sqrt{N}}
+$$
+
+For $N = 1$, standard error is undefined ($\text{None}$).
+
+### 5. Descriptive Standardized Deviation ($z$-score)
+
+To express point deviation in units of sample standard deviation:
+
+$$
+z = \frac{x - \mu}{s}, \quad \text{for } s > \epsilon \text{ and } N \ge 2
+$$
+
+If $s \le \epsilon$ and $|x - \mu| \le \epsilon$, $z = 0.0$.
+If $s \le \epsilon$ and $|x - \mu| > \epsilon$, $z$ is undefined ($\text{None}$).
+
+**Scientific Precaution on Normality:**
+Quantum verification metrics (fidelity $F \in [0, 1]$, probabilities $P \in [0, 1]$, expectations $\langle P \rangle \in [-1, 1]$) are bounded. Under finite calibration samples ($N \sim 5 - 100$) or near boundary saturation (e.g. ideal fidelity near $1.0$), empirical distributions are non-Gaussian. Therefore, $z$ is treated purely as a descriptive distance metric, **never** as an automatic attack classifier or threshold decision.
+
+### 6. Confidence Interval Containment
+
+Given a baseline confidence interval $[\text{CI}_{\text{low}}, \text{CI}_{\text{high}}]$ (e.g. Student's $t$ with $N-1$ degrees of freedom):
+
+$$
+\text{Containment}(x) =
+\begin{cases}
+\text{inside}, & \text{CI}_{\text{low}} < x < \text{CI}_{\text{high}} \\
+\text{boundary}, & |x - \text{CI}_{\text{low}}| \le \text{atol} \text{ or } |x - \text{CI}_{\text{high}}| \le \text{atol} \\
+\text{outside}, & x < \text{CI}_{\text{low}} - \text{atol} \text{ or } x > \text{CI}_{\text{high}} + \text{atol} \\
+\text{unavailable}, & \text{CI is None} \quad (N = 1)
+\end{cases}
+$$
+
+where $\text{atol} = 10^{-9}$.
+
+### 7. Discrete Total Variation Distance
+
+For discrete Born probability distributions $P$ and $Q$ over measurement outcomes $\Omega$:
+
+$$
+\text{TV}(P, Q) = \frac{1}{2} \sum_{i \in \Omega} |P(i) - Q(i)|
+$$
+
+Properties:
+* $0.0 \le \text{TV}(P, Q) \le 1.0$.
+* $\text{TV}(P, Q) = 0.0 \iff P = Q$.
+* $\text{TV}(P, Q) = 1.0$ for mutually disjoint distributions.
+
+Both $P$ and $Q$ must satisfy $\sum_i P(i) = 1.0 \pm 10^{-4}$ and $P(i) \in [0, 1]$. Missing outcomes are treated as $0.0$.
+
+---
+
 # 37. Threshold Definition
 
 A threshold is a rule boundary separating expected and unexpected behavior.

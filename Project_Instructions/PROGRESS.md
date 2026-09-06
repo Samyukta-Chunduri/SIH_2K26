@@ -70,25 +70,29 @@ Demo ready
 
 ```text
 Current Phase:
-M0 — Environment / Foundation
+M10 — Statistical Comparison Engine (COMPLETE & VALIDATED)
+M11 — Forgery Detection (NOT STARTED)
 
 Overall Completion:
-0% initially
+M0–M10 Complete (11 of 19 milestones, 57.9%)
 
-Core Quantum Layer:
+Core Quantum Layer (M0–M7):
+COMPLETE & VALIDATED
+
+Honest Noise & Baseline (M8–M9):
+COMPLETE & VALIDATED
+
+Statistical Evidence Engine (M10):
+COMPLETE & VALIDATED
+
+Threshold Policy & Decision Engine (M11–M12):
 NOT STARTED
 
-QDS Layer:
-PLANNED
+Attack Simulation (M13–M15):
+NOT STARTED
 
-Statistical Detection:
-PLANNED
-
-Attack Simulation:
-PLANNED
-
-Evaluation:
-PLANNED
+Evidence Fusion & Evaluation (M16–M18):
+NOT STARTED
 
 Dashboard:
 PLANNED
@@ -97,7 +101,7 @@ Blockchain:
 DEFERRED
 ```
 
-The percentage must be updated based on actual completed milestones, not estimated effort.
+The percentage is updated based on actual completed milestones (11/19 = 57.9%), not estimated effort.
 
 ---
 
@@ -139,7 +143,7 @@ Implemented
 | M7  | Teleportation verification     | COMPLETE    |
 | M8  | Noise and channel imperfections | COMPLETE — REVIEWED & VALIDATED |
 | M9  | Honest baseline                | COMPLETE — REVIEWED & VALIDATED |
-| M10 | Statistical threshold engine   | NOT STARTED |
+| M10 | Statistical comparison engine | COMPLETE — REVIEWED & VALIDATED |
 | M11 | Forgery detection              | NOT STARTED |
 | M12 | Replay detection               | NOT STARTED |
 | M13 | Impersonation detection        | NOT STARTED |
@@ -743,8 +747,8 @@ COMPLETE — REVIEWED & VALIDATED
   * Created: `src/noise/models.py`
   * Created: `src/noise/teleportation_noise.py`
   * Created: `tests/test_noise.py` (52 comprehensive tests)
-  * Modified: `Project_Instructions/decisions.md` (added DEC-054)
-  * Modified: `Project_Instructions/progess.md` (updated Milestone Tracker and M8 section)
+  * Modified: `Project_Instructions/DECISIONS.md` (added DEC-054)
+  * Modified: `Project_Instructions/PROGRESS.md` (updated Milestone Tracker and M8 section)
 * **Mathematical & Channel Validation:**
   * Probability checks: $p \in [0.0, 1.0]$, strictly rejecting out-of-bounds, negative, NaN, Inf, and boolean values without silent clipping.
   * Zero-noise identity: verified that $p=0.0$ returns identical density matrices and states within machine tolerance ($10^{-14}$) for $|0\rangle, |1\rangle, |+\rangle, |-\rangle, |+i\rangle, |-i\rangle$, and complex states.
@@ -905,8 +909,8 @@ COMPLETE — REVIEWED & VALIDATED
   * Created: `src/statistics/calibration.py`
   * Modified: `src/statistics/__init__.py`
   * Created: `tests/test_baseline.py` (39 comprehensive tests)
-  * Modified: `Project_Instructions/decisions.md` (added DEC-055)
-  * Modified: `Project_Instructions/progess.md` (updated Milestone Tracker and M9 section)
+  * Modified: `Project_Instructions/DECISIONS.md` (added DEC-055)
+  * Modified: `Project_Instructions/PROGRESS.md` (updated Milestone Tracker and M9 section)
 * **Statistical Conventions & Validation:**
   * Sample variance: $s^2 = \frac{1}{N - 1}\sum (x_i - \mu)^2$ for $N \ge 2$, $s^2 = 0.0$ for $N = 1$.
   * Confidence intervals: Student's $t$ distribution with $df = N - 1$ at $95\%$ confidence level, clamped to physical metric domains ($N \ge 2$; `None` for $N=1$).
@@ -945,32 +949,56 @@ COMPLETE — REVIEWED & VALIDATED
 
 ---
 
-# 16. M10 — Statistical Threshold Engine
+# 16. M10 — Statistical Analysis & Comparison Engine
 
 ## Objective
 
-Implement deterministic anomaly detection.
+Implement a mathematically rigorous and scientifically defensible statistical comparison layer that compares newly observed quantum verification metrics against M9 calibrated honest baselines.
+
+### Scope & Separation Rule
+
+* M10 produces **descriptive statistical evidence only**.
+* M10 contains strictly **no attack detection, no security decision thresholds, no threat classification, and no ACCEPT/SUSPICIOUS/ATTACK logic** (deferred strictly to M11/M12).
+* M10 contains **no AI/ML, neural networks, or composite security scores**.
+* M10 guarantees **baseline immutability** and contamination prevention.
 
 ### Tasks
 
-* [ ] Compare observed metrics against baseline
-* [ ] Implement metric-specific thresholds
-* [ ] Support threshold direction
-* [ ] Support multiple metrics
-* [ ] Generate evidence
-* [ ] Produce ACCEPT/SUSPICIOUS/ATTACK
-* [ ] Version thresholds
-* [ ] Test deterministic decisions
-
-### Critical rule
-
-No unexplained arbitrary thresholds.
+* [x] Absolute deviation calculation ($d = |x - \mu|$)
+* [x] Signed deviation calculation ($\delta = x - \mu$)
+* [x] Safe relative deviation calculation with zero-division handling ($|\mu| < 10^{-12} \implies \text{None}$)
+* [x] Baseline standard error of the mean ($SE = s/\sqrt{N}$ for $N \ge 2$, `None` for $N = 1$)
+* [x] Descriptive standardized deviation ($z$-score) with zero-variance handling and explicit documentation of bounded non-Gaussian metrics
+* [x] Confidence interval containment check (`inside`, `outside`, `boundary`, `unavailable`)
+* [x] Discrete Total Variation (TV) distance for Born probability distributions ($TV \in [0.0, 1.0]$)
+* [x] Distribution comparison container (`DistributionComparison`) with per-outcome signed/absolute deviations
+* [x] Scalar metric comparison engine (`MetricDeviation`)
+* [x] Multi-metric observation comparison container (`StatisticalEvidence`)
+* [x] Dedicated evaluation observation container (`VerificationObservation`) to prevent calibration contamination
+* [x] Strict configuration compatibility and isolation enforcement (`ConfigurationCompatibilityError`)
+* [x] Baseline immutability preservation (frozen dataclass, zero baseline mutation, zero observation absorption)
+* [x] Full bug-catching sensitivity suite covering Bugs A through Z
+* [x] Deep audit & bug fix: elimination of silent baseline normalization (Bug L) in favor of strict pre-validation without silent repair
+* [x] Strict parameter validation for sample_count, epsilon, atol, and dictionary outcome keys/bounds
+* [x] Direct observation.shots validation against baseline shots in the absence of full configuration objects
+* [x] Configuration state set compatibility checks
+* [x] Quantum cross-validation using simulated Pauli eigenstates, teleportation, depolarizing noise, and M9 baselines
+* [x] Complete automated test suite: 69 tests passing in `tests/test_statistical_comparison.py`
+* [x] Full regression test pass across all milestones M0–M10: 471 tests passed in 5.22s with zero warnings (`pytest -v -W error`)
+* [x] Strict type-checking: Pyright reports 0 errors, 0 warnings, 0 informations across entire repository (`src` and `tests`)
 
 ### Status
 
 ```text
-NOT STARTED
+COMPLETE — AUDITED, REVIEWED & VALIDATED
 ```
+
+* **Module:** `src/statistics/comparison.py`, `src/statistics/__init__.py`
+* **Tests:** `tests/test_statistical_comparison.py` (69 tests)
+* **Regression Result:** All 471 tests pass across M0–M10 with zero warnings.
+* **Type-Check Result:** Pyright reports 0 errors, 0 warnings, 0 informations.
+* **Governing Decisions:** DEC-056, DEC-057 (`Project_Instructions/DECISIONS.md`)
+* **Mathematical Spec:** Section 36A (`Project_Instructions/MATHEMATICAL_MODEL.md`)
 
 ---
 

@@ -1383,7 +1383,74 @@ Do not silently choose whichever version is easier to implement.
 
 ---
 
-# 56. Final Decision Principle
+# 56. DEC-056 — Statistical Comparison Engine Architecture, Non-Normality of Bounded Metrics, Descriptive Z-Scores vs Decision Thresholds, Safe Relative Deviations, Total Variation Distance, and Strict Separation from Decision Engine
+
+**Status:** ACCEPTED (Milestone M10)
+
+### Decision
+
+1. **Purpose and Boundaries of Statistical Comparison Layer:**
+   Milestone M10 implements a purely descriptive statistical comparison engine. It quantifies the degree of divergence between newly observed quantum verification metrics and a compatible M9 honest baseline.
+   $$\text{Observation} + \text{Honest Baseline} \implies \text{Statistical Comparison} \implies \text{Statistical Evidence}$$
+   - M10 produces **statistical evidence only**.
+   - M10 contains **strictly no attack detection, no security decision thresholds, no threat classification, and no ACCEPT/SUSPICIOUS/ATTACK logic** (strictly reserved for M11 and M12).
+   - M10 contains **no AI/ML, neural networks, anomaly classifiers, or composite "security scores"**.
+
+2. **Absolute and Signed Deviations:**
+   For scalar metrics $x$ against baseline mean $\mu$:
+   - Absolute deviation: $d = |x - \mu| \ge 0$
+   - Signed deviation: $\delta = x - \mu$
+
+3. **Safe Relative Deviation Policy:**
+   Relative deviation is defined as $d_{\text{rel}} = \frac{|x - \mu|}{|\mu|}$ for $|\mu| \ge 10^{-12}$.
+   When $|\mu| < 10^{-12}$ (e.g., zero error rate under ideal teleportation), division by zero is avoided by explicitly returning `None` instead of producing `NaN` or `Inf`.
+
+4. **Baseline Uncertainty and Standard Error:**
+   The baseline mean $\mu$ is an empirical sample estimate with sampling uncertainty. For $N \ge 2$, the standard error of the mean is:
+   $$\text{SE} = \frac{s}{\sqrt{N}}$$
+   For $N = 1$, standard error is undefined and returns `None`.
+
+5. **Descriptive Standardized Deviation ($z$-score) vs. Bounded Non-Gaussian Metrics:**
+   Standardized deviation is computed as $z = \frac{x - \mu}{s}$ for $s > 10^{-12}$ and $N \ge 2$.
+   - **Non-Normality Notice:** Quantum verification metrics (state fidelity $F \in [0, 1]$, error rates $\text{QBER} \in [0, 1]$, Born probabilities $P \in [0, 1]$, and Pauli expectations $\langle P \rangle \in [-1, 1]$) are strictly bounded. Under finite calibration samples ($N \sim 5$ to $100$) or near boundary saturation (e.g. ideal fidelity near $1.0$), empirical distributions are truncated and non-Gaussian.
+   - **Descriptive Scale Only:** $z$ is exposed solely as a descriptive scale (number of sample standard deviations from the sample mean). It is **never** used as a hardcoded anomaly or attack threshold (e.g. $|z| > 3$).
+
+6. **Confidence Interval Containment:**
+   Evaluates whether the observed point $x$ lies within the baseline Student's $t$ confidence interval $[\text{CI}_{\text{low}}, \text{CI}_{\text{high}}]$. Results are categorized as:
+   - `'inside'`: $\text{CI}_{\text{low}} < x < \text{CI}_{\text{high}}$
+   - `'outside'`: $x < \text{CI}_{\text{low}} - \text{atol}$ or $x > \text{CI}_{\text{high}} + \text{atol}$
+   - `'boundary'`: within numerical tolerance $\text{atol} = 10^{-9}$ of an interval boundary
+   - `'unavailable'`: when $N=1$ and baseline CI is `None`.
+
+7. **Discrete Total Variation Distance for Probability Distributions:**
+   Born probability distribution divergence across measurement bases ($Z, X, Y$) is evaluated via Total Variation (TV) distance:
+   $$\text{TV}(P, Q) = \frac{1}{2} \sum_{i \in \Omega} |P(i) - Q(i)| \in [0.0, 1.0]$$
+   Distributions must be normalized ($\sum P_i = 1.0 \pm 10^{-4}$ with $P_i \in [0, 1]$). Missing outcomes in either distribution are explicitly treated as probability $0.0$.
+
+8. **Strict Configuration Compatibility & Isolation:**
+   Observations must match the calibrated operating environment of the baseline (state set, noise model, noise strength, channel location, shot count, backend, and canonical hash). Any attempt to evaluate an observation against an incompatible baseline raises a `ConfigurationCompatibilityError`.
+
+9. **Baseline Immutability & Contamination Prevention:**
+   The honest baseline is an immutable reference model. Evaluation observations are held in `VerificationObservation` containers separate from `CalibrationObservation`. Comparison functions never mutate the baseline, update baseline statistics, or append evaluation data to calibration sets.
+
+---
+
+# 57. DEC-057 — Strict Baseline Distribution Validation & Non-Repair Policy (Bug L Elimination)
+
+**Status:** ACCEPTED
+
+### Decision
+
+The M10 statistical comparison engine shall strictly validate all candidate probability distributions before comparison and **shall NEVER perform silent normalization** (such as dividing by `sum(probabilities)`).
+
+1. If a baseline probability distribution for any basis does not sum to $1.0$ within the configured numerical tolerance (`prob_atol = 1e-4`), the engine immediately raises a `ValueError`.
+2. Silent re-normalization is strictly prohibited because repairing corrupted baseline distributions conceals calibration defects, invalidates statistical error bounds, and creates false confidence in uncalibrated outcomes.
+3. Outcome keys must be strictly validated as strings, and probability values must be finite floats within $[0.0, 1.0]$.
+4. Configuration compatibility checks must evaluate both observation configuration dictionaries and direct `observation.shots` values against baseline operating parameters.
+
+---
+
+# 58. Final Decision Principle
 
 Q-SHIELD follows:
 
