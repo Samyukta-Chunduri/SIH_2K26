@@ -2046,7 +2046,56 @@ The M10 statistical comparison engine shall strictly validate all candidate prob
 
 ---
 
-# 66. Final Decision Principle
+# 66. DEC-066 — Product / Application Layer Architecture, SQLite Persistence, FastAPI Service Boundary, React Frontend, and Invariant Decision Authority
+
+**Status:** ACCEPTED (Milestone M19)
+
+### Decision
+
+1. **Purpose and Scope Boundary of M19:**
+   Milestone M19 establishes the product and application layer for Q-SHIELD.
+   $$\text{User / SIH Evaluator} \longleftrightarrow \text{React UI} \longleftrightarrow \text{FastAPI Service} \longleftrightarrow \text{Q-SHIELD Engine} \longleftrightarrow \text{SQLite Memory}$$
+   - M19 provides: persistence, APIs, visualization, security history, evaluation access, benchmarking access, and demonstration workflows.
+   - **M19 is strictly an application and presentation layer.**
+   - M19 does **NOT** detect attacks.
+   - M19 does **NOT** decide security outcomes.
+   - M19 does **NOT** evaluate security correctness.
+   - M19 does **NOT** alter M0–M18 detection rules or threshold policies.
+
+2. **Absolute Decision Authority (M12 Invariant):**
+   The authoritative security decision hierarchy remains unchanged:
+   $$\text{M12 (Sole Final Security Decision)} \longrightarrow \text{M19 (Application / Presentation / Memory)}$$
+   - M12 decides. M19 exposes, visualizes, and remembers.
+   - Neither SQLite, FastAPI, nor React may independently compute, alter, or override security verdicts (`ACCEPT`, `SUSPICIOUS`, `ATTACK`).
+
+3. **Strict Prohibition of Arbitrary Scores:**
+   M19 strictly prohibits:
+   - `security_score`, `risk_score`, `trust_score`, `threat_score`, `confidence_percentage`, or `attack_probability` in the database, API schemas, or frontend UI.
+   - Displaying deceptive numbers such as "98% Secure" or "85% Risk".
+
+4. **Persistence Architecture (SQLite):**
+   - SQLite is the sole persistent store for local application demonstration.
+   - Parameterized queries and explicit foreign keys.
+   - WAL mode for concurrent read access.
+   - Zero secret storage: credentials, passwords, raw private keys, and key material are strictly rejected before writing.
+
+5. **API Service Boundary (FastAPI):**
+   - Strongly typed Pydantic models for request/response contracts.
+   - Direct invocation of existing domain functions (`evaluate_security_decision`, `fuse_security_evidence`, `run_security_evaluation`, `run_benchmark_suite`).
+   - Global exception handling preventing internal stack trace leakage and preventing silent conversion of failures into `ACCEPT`.
+
+6. **Frontend Architecture (React + TypeScript + Vite):**
+   - Modular design system with dark cybersecurity aesthetics (slate/dark mode, quantum cyan/indigo accents).
+   - Clear semantic status colors for M12 verdicts (`ACCEPT` = emerald, `SUSPICIOUS` = amber, `ATTACK` = crimson).
+   - Accessible, keyboard-navigable components.
+   - Six dedicated pages: Overview, Quantum Telemetry, Threat Inspector, Fusion & M12 Decision, M17 Evaluation, and M18 Benchmarking.
+
+7. **M20 Deferred Boundary:**
+   M20 (Blockchain Audit Layer) remains strictly deferred.
+
+---
+
+# 67. Final Decision Principle
 
 Q-SHIELD follows:
 

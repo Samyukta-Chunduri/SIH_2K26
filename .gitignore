@@ -68,3 +68,10 @@ dmypy.json
 # OS
 .DS_Store
 Thumbs.db
+
+# SQLite Databases
+*.db
+*.sqlite
+*.sqlite3
+
+frontend/node_modules/

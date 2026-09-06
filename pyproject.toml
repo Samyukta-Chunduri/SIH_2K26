@@ -22,6 +22,11 @@ minversion = "7.0"
 addopts = "-ra -q"
 testpaths = ["tests"]
 pythonpath = [".", "src"]
+filterwarnings = [
+    "error",
+    "ignore:The anyio.abc.BlockingPortal alias is deprecated:DeprecationWarning",
+    "ignore::starlette.exceptions.StarletteDeprecationWarning",
+]
 
 [tool.pyright]
 venvPath = "."
